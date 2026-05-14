@@ -46,4 +46,26 @@ const venousCase = global.ABGEngine.analyze({
 }, settings);
 assert(venousCase.oxygenation.oxygenation_interpretation.includes("arterial sample"));
 
+const radiometerCase = global.ABGEngine.analyze({
+  pH: { value: "7.003", unit: "unitless" },
+  paCO2: { value: "49.3", unit: "mmHg" },
+  paO2: { value: "50", unit: "mmHg" },
+  fio2: { value: "100", unit: "percent" },
+  hco3: { value: "11.7", unit: "mmol/L" },
+  sbe: { value: "-17.4", unit: "mmol/L" },
+  sodium: { value: "126", unit: "mmol/L" },
+  potassium: { value: "3.6", unit: "mmol/L" },
+  chloride: { value: "142", unit: "mmol/L" },
+  lactate: { value: "12.1", unit: "mmol/L" },
+  glucose: { value: "49", unit: "mg/dL" },
+  measuredOsmolality: { value: "254.8", unit: "mOsm/kg" },
+  sampleType: "arterial",
+  flags: {}
+}, settings);
+assert.strictEqual(radiometerCase.metabolic_analysis.corrected_anion_gap, -27.7);
+assert.strictEqual(radiometerCase.metabolic_analysis.anion_gap_category, "low anion gap");
+assert.strictEqual(radiometerCase.alactic_base_excess.ABE, -5.3);
+assert(radiometerCase.stepwise_interpretation.interpretation_steps.some((line) => line.includes("respiratory acidosis")));
+assert(radiometerCase.stepwise_interpretation.calculations.some((line) => line.includes("Winter formula")));
+
 console.log("ABG engine smoke tests passed.");

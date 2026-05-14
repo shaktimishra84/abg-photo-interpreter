@@ -30,16 +30,14 @@
   const REQUIRED_FIELDS = [
     "pH",
     "paCO2",
+    "paO2",
+    "fio2",
     "hco3",
     "sbe",
     "sodium",
     "potassium",
     "chloride",
     "lactate",
-    "albumin",
-    "paO2",
-    "fio2",
-    "age",
     "sampleType"
   ];
 
@@ -387,7 +385,9 @@
       } else {
         result.correctedAnionGap = result.anionGap;
         if (has(v.albumin.value)) result.correctedAnionGap = result.anionGap + 0.25 * (40 - v.albumin.value);
-        result.anionGapCategory = result.correctedAnionGap > agUpper ? "high anion gap" : "normal anion gap";
+        if (result.correctedAnionGap > agUpper) result.anionGapCategory = "high anion gap";
+        else if (result.correctedAnionGap < 3) result.anionGapCategory = "low anion gap";
+        else result.anionGapCategory = "normal anion gap";
         result.deltaAG = result.correctedAnionGap - agUpper;
         result.deltaHCO3 = 24 - v.hco3.value;
         result.deltaGap = result.deltaAG - result.deltaHCO3;
@@ -543,9 +543,13 @@
       add("High osmolal gap with acidosis raises toxic alcohol concern, while DKA, alcoholic ketoacidosis, and lactic acidosis remain possible.");
       addTests(["ethanol level", "methanol/ethylene glycol level", "repeat osmolality", "lactate gap check"]);
     }
-    if (primary.tendencies.metabolicAcidosis && metabolic.anionGapCategory === "normal anion gap") {
+    if (primary.tendencies.metabolicAcidosis && (metabolic.anionGapCategory === "normal anion gap" || metabolic.anionGapCategory === "low anion gap")) {
       add("Normal anion gap acidosis: consider saline/hyperchloremia, diarrhea, renal tubular acidosis, renal failure, ureteric diversion, acetazolamide/topiramate.");
       addTests(["urine sodium/potassium/chloride", "urine pH", "renal function", "medication review"]);
+    }
+    if (metabolic.anionGapCategory === "low anion gap") {
+      add("Low or negative anion gap: recheck sodium/chloride/bicarbonate, consider marked hyperchloremia, hypoalbuminemia, paraproteins, lithium/bromide exposure, or analyzer/sample issue.");
+      addTests(["repeat electrolytes", "albumin", "total protein", "medication/toxin review"]);
     }
     if (primary.tendencies.metabolicAlkalosis) {
       if (has(v.urineChloride.value) && v.urineChloride.value < 20) add("Chloride-responsive metabolic alkalosis: vomiting, nasogastric suction, remote diuretics, post-hypercapnic alkalosis.");
@@ -598,6 +602,94 @@
     return lines;
   }
 
+  function stepwiseInterpretation(v, primary, metabolic, compensationResult, abe, oxy, causes, settings) {
+    const steps = [];
+    const calculations = [];
+    const ph = v.pH.value;
+    const paCO2 = v.paCO2.value;
+    const hco3 = v.hco3.value;
+    const sbe = v.sbe.value;
+    const lactate = v.lactate.value;
+
+    if (has(ph)) {
+      const severity = ph < 7.2 ? "severe " : "";
+      steps.push(`pH ${round(ph, 3)} shows ${severity}${primary.pHStatus.toLowerCase()}.`);
+    } else {
+      steps.push("pH is missing, so acidemia/alkalemia cannot be classified.");
+    }
+
+    if (has(hco3) || has(sbe)) {
+      const metabolicParts = [];
+      if (has(hco3)) metabolicParts.push(`HCO3 ${round(hco3)} mmol/L`);
+      if (has(sbe)) metabolicParts.push(`base excess ${round(sbe)} mmol/L`);
+      if (primary.tendencies.metabolicAcidosis) steps.push(`${metabolicParts.join(" and ")} indicate a metabolic acidosis component.`);
+      else if (primary.tendencies.metabolicAlkalosis) steps.push(`${metabolicParts.join(" and ")} indicate a metabolic alkalosis component.`);
+      else steps.push(`${metabolicParts.join(" and ")} do not show a major metabolic component by the default thresholds.`);
+    }
+
+    if (has(paCO2)) {
+      if (primary.tendencies.respiratoryAcidosis) steps.push(`PaCO2 ${round(paCO2)} mmHg is high, adding a respiratory acidosis component.`);
+      else if (primary.tendencies.respiratoryAlkalosis) steps.push(`PaCO2 ${round(paCO2)} mmHg is low, adding a respiratory alkalosis component.`);
+      else steps.push(`PaCO2 ${round(paCO2)} mmHg is in the expected screening range for ventilation.`);
+    }
+
+    compensationResult.lines.forEach((line) => steps.push(line));
+
+    if (has(metabolic.correctedAnionGap)) {
+      const albuminText = has(v.albumin.value)
+        ? `albumin-corrected anion gap is ${round(metabolic.correctedAnionGap, 2)} mmol/L`
+        : `anion gap is ${round(metabolic.correctedAnionGap, 2)} mmol/L without albumin correction`;
+      steps.push(`${albuminText}, which is ${metabolic.anionGapCategory}.`);
+    } else if (has(metabolic.anionGap)) {
+      steps.push(`Uncorrected anion gap is ${round(metabolic.anionGap, 2)} mmol/L; albumin correction is not available.`);
+    }
+
+    if (has(lactate)) {
+      if (lactate >= 4) steps.push(`Lactate ${round(lactate, 2)} mmol/L is severe hyperlactatemia and can drive lactic metabolic acidosis.`);
+      else if (lactate > 2) steps.push(`Lactate ${round(lactate, 2)} mmol/L is elevated and may contribute to metabolic acidosis.`);
+      else steps.push(`Lactate ${round(lactate, 2)} mmol/L is not elevated by the usual screening threshold.`);
+    }
+
+    if (has(abe.ABE)) steps.push(`Alactic base excess is ${round(abe.ABE, 2)} mmol/L, so ${abe.interpretation.toLowerCase()}`);
+    if (has(oxy.A_a_gradient)) steps.push(`A-a gradient is ${round(oxy.A_a_gradient, 2)} mmHg; ${oxy.interpretation}`);
+    else if (oxy.blockedReason) steps.push(oxy.blockedReason);
+
+    if (has(v.sodium.value) && has(v.chloride.value) && has(v.hco3.value)) {
+      calculations.push(`Anion gap = Na - (Cl + HCO3) = ${round(v.sodium.value, 2)} - (${round(v.chloride.value, 2)} + ${round(v.hco3.value, 2)}) = ${round(metabolic.anionGap, 2)} mmol/L.`);
+      if (has(v.albumin.value)) {
+        calculations.push(`Albumin-corrected AG = AG + 0.25 x (40 - albumin g/L) = ${round(metabolic.anionGap, 2)} + 0.25 x (40 - ${round(v.albumin.value, 2)}) = ${round(metabolic.correctedAnionGap, 2)} mmol/L.`);
+      } else {
+        calculations.push("Albumin was not entered, so the displayed anion gap is uncorrected. Add albumin if available for albumin-corrected AG.");
+      }
+    }
+
+    if (primary.tendencies.metabolicAcidosis && has(hco3)) {
+      const center = 1.5 * hco3 + 8;
+      calculations.push(`Winter formula = 1.5 x HCO3 + 8 +/- 2 = 1.5 x ${round(hco3, 2)} + 8 +/- 2 = expected PaCO2 ${round(center - 2, 2)}-${round(center + 2, 2)} mmHg.`);
+    }
+
+    if (metabolic.deltaInterpretation) {
+      calculations.push(`Delta gap = (corrected AG - upper limit) - (24 - HCO3) = ${round(metabolic.deltaAG, 2)} - ${round(metabolic.deltaHCO3, 2)} = ${round(metabolic.deltaGap, 2)}; ${metabolic.deltaInterpretation}`);
+    }
+
+    if (has(abe.ABE)) {
+      calculations.push(`Alactic base excess = SBE + lactate = ${round(sbe, 2)} + ${round(lactate, 2)} = ${round(abe.ABE, 2)} mmol/L.`);
+    }
+
+    if (has(oxy.PAO2) && has(oxy.A_a_gradient)) {
+      const pb = Number(settings.barometricPressure) || 760;
+      const rq = Number(settings.respiratoryQuotient) || 0.8;
+      calculations.push(`Alveolar PO2 = FiO2 x (barometric pressure - 47) - PaCO2/RQ = ${round(v.fio2.value, 2)} x (${pb} - 47) - ${round(v.paCO2.value, 2)}/${rq} = ${round(oxy.PAO2, 2)} mmHg.`);
+      calculations.push(`A-a gradient = alveolar PO2 - PaO2 = ${round(oxy.PAO2, 2)} - ${round(v.paO2.value, 2)} = ${round(oxy.A_a_gradient, 2)} mmHg.`);
+    }
+
+    return {
+      interpretation_steps: steps,
+      calculations,
+      possible_reasons: causes.causes
+    };
+  }
+
   function analyze(raw, settings = {}) {
     const normalized = normalize(raw);
     const v = normalized.converted;
@@ -610,6 +702,7 @@
     const oxy = oxygenation(v, settings);
     const causes = likelyCauses(v, primary, metabolic, stewart, abe, raw.flags || {});
     const finalDiagnosis = lineItems(v, primary, metabolic, compensationResult, stewart, abe, oxy);
+    const stepwise = stepwiseInterpretation(v, primary, metabolic, compensationResult, abe, oxy, causes, settings);
 
     const blockedCalculations = [];
     if (!has(metabolic.osmolalGap) && has(v.measuredOsmolality.value)) {
@@ -682,6 +775,7 @@
         oxygenation_interpretation: oxy.interpretation || oxy.blockedReason
       },
       final_diagnosis: finalDiagnosis,
+      stepwise_interpretation: stepwise,
       likely_causes: causes.causes,
       recommended_missing_tests: causes.recommendedMissingTests,
       clinical_warning: "Interpretation must be correlated with clinical context. This app does not replace clinician judgement."

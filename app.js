@@ -6,7 +6,7 @@
   let latestReport = null;
   let selectedPhoto = null;
 
-  const coreFieldIds = ["pH", "paCO2", "hco3", "sbe", "sodium", "chloride", "lactate", "albumin"];
+  const coreFieldIds = ["pH", "paCO2", "paO2", "fio2", "hco3", "sbe", "sodium", "potassium", "chloride", "lactate", "sampleType"];
 
   const groups = [
     {
@@ -14,7 +14,9 @@
       tab: "core",
       fields: [
         { id: "pH", label: "pH", units: ["unitless"], required: true },
-        { id: "paCO2", label: "PaCO2", units: ["auto", "mmHg", "kPa"], required: true },
+        { id: "paCO2", label: "PaCO2", units: ["mmHg", "kPa"], required: true },
+        { id: "paO2", label: "PaO2", units: ["mmHg", "kPa"], required: true },
+        { id: "fio2", label: "FiO2", units: ["percent", "fraction"], required: true },
         { id: "hco3", label: "HCO3", units: ["mmol/L", "mEq/L"], required: true },
         { id: "sbe", label: "SBE / BE", units: ["mmol/L"], required: true }
       ]
@@ -24,28 +26,20 @@
       tab: "core",
       fields: [
         { id: "sodium", label: "Sodium", units: ["mmol/L", "mEq/L"], required: true },
-        { id: "chloride", label: "Chloride", units: ["mmol/L", "mEq/L"], required: true },
-        { id: "lactate", label: "Lactate", units: ["auto", "mmol/L", "mg/dL", "mEq/L"], required: true },
-        { id: "albumin", label: "Albumin", units: ["auto", "g/L", "g/dL"], required: true }
-      ]
-    },
-    {
-      title: "Oxygen and patient",
-      tab: "more",
-      fields: [
-        { id: "paO2", label: "PaO2", units: ["auto", "mmHg", "kPa"], required: true },
-        { id: "fio2", label: "FiO2", units: ["auto", "fraction", "percent"], required: true },
         { id: "potassium", label: "Potassium", units: ["mmol/L", "mEq/L"], required: true },
-        { id: "age", label: "Age", units: ["years"], required: true }
+        { id: "chloride", label: "Chloride", units: ["mmol/L", "mEq/L"], required: true },
+        { id: "lactate", label: "Lactate", units: ["mmol/L", "mg/dL", "mEq/L"], required: true },
+        { id: "glucose", label: "Glucose", units: ["mg/dL", "mmol/L"] }
       ]
     },
     {
       title: "Extra labs",
       tab: "more",
       fields: [
-        { id: "glucose", label: "Glucose", units: ["auto", "mmol/L", "mg/dL"] },
-        { id: "urea", label: "Urea / BUN", units: ["auto", "urea_mmol_L", "BUN_mg_dL", "urea_mg_dL"] },
-        { id: "creatinine", label: "Creatinine", units: ["auto", "mg/dL", "micromol/L"] },
+        { id: "age", label: "Age", units: ["years"] },
+        { id: "albumin", label: "Albumin", units: ["g/L", "g/dL"] },
+        { id: "urea", label: "Urea / BUN", units: ["BUN_mg_dL", "urea_mmol_L", "urea_mg_dL"] },
+        { id: "creatinine", label: "Creatinine", units: ["mg/dL", "micromol/L"] },
         { id: "measuredOsmolality", label: "Measured osmolality", units: ["mOsm/kg"] },
         { id: "betaHydroxybutyrate", label: "Beta-hydroxybutyrate", units: ["mmol/L", "mg/dL"] },
         { id: "phosphate", label: "Phosphate", units: ["mmol/L", "mg/dL"] },
@@ -72,41 +66,37 @@
 
   const parsePatterns = [
     { id: "pH", label: "pH", units: "unitless", patterns: [/(?:^|[^A-Z0-9])PH[^0-9+\-.]{0,12}([+\-]?\d+(?:[.,]\d+)?)/i] },
-    { id: "paCO2", label: "PaCO2", units: "auto", patterns: [/\b(?:PA?CO2|PA?C02|PCO2|PC02|PACO₂|PCO₂)\b[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
-    { id: "paO2", label: "PaO2", units: "auto", patterns: [/\b(?:PA?O2|PA?02|PO2|P02|PAO₂|PO₂)\b[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
-    { id: "hco3", label: "HCO3", units: "mmol/L", patterns: [/\b(?:HCO3|HCO₃|BICARB(?:ONATE)?|CHCO3)\b[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
-    { id: "sbe", label: "SBE / BE", units: "mmol/L", patterns: [/\b(?:SBE|ABE|BASE\s*EXCESS|BASE\s*EXC|B\.?E\.?|BE)\b[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
-    { id: "sodium", label: "Sodium", units: "mmol/L", patterns: [/\b(?:NA\+?|SODIUM)\b[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
-    { id: "potassium", label: "Potassium", units: "mmol/L", patterns: [/\b(?:K\+?|POTASSIUM)\b[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
-    { id: "chloride", label: "Chloride", units: "mmol/L", patterns: [/\b(?:CL-?|CHLORIDE)\b[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
-    { id: "lactate", label: "Lactate", units: "auto", patterns: [/\b(?:LACTATE|LACT|LAC)\b[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
-    { id: "albumin", label: "Albumin", units: "auto", patterns: [/\b(?:ALBUMIN|ALB)\b[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
-    { id: "fio2", label: "FiO2", units: "auto", patterns: [/\b(?:FIO2|FI02|INSPIRED\s*O2)\b[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
-    { id: "glucose", label: "Glucose", units: "auto", patterns: [/\b(?:GLUCOSE|GLU)\b[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
-    { id: "urea", label: "Urea / BUN", units: "auto", patterns: [/\b(?:BUN|UREA)\b[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
-    { id: "creatinine", label: "Creatinine", units: "auto", patterns: [/\b(?:CREATININE|CREAT|CR)\b[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] }
+    { id: "paCO2", label: "PaCO2", units: "mmHg", patterns: [/(?:^|[^A-Z0-9])(?:PA?CO2|PA?C02|PCO2|PC02|PACO2|PCO2)[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
+    { id: "paO2", label: "PaO2", units: "mmHg", patterns: [/(?:^|[^A-Z0-9])(?:PA?O2|PA?02|PO2|P02|PAO2|PO2)[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
+    { id: "hco3", label: "HCO3", units: "mmol/L", patterns: [/(?:^|[^A-Z0-9])CHCO3\s*-\s*\(\s*P\s*\)\s*C?[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i, /(?:^|[^A-Z0-9])(?:HCO3|BICARB(?:ONATE)?|CHCO3)[^0-9+\-.]{0,24}([+\-]?\d+(?:[.,]\d+)?)/i] },
+    { id: "sbe", label: "SBE / BE", units: "mmol/L", patterns: [/(?:^|[^A-Z0-9])C?BASE(?:\s*\([^)]*\))?C?[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i, /(?:^|[^A-Z0-9])(?:SBE|ABE|BASE\s*EXCESS|BASE\s*EXC|B\.?E\.?|BE)[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
+    { id: "sodium", label: "Sodium", units: "mmol/L", patterns: [/(?:^|[^A-Z0-9])C?\s*NA\+?[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i, /(?:^|[^A-Z0-9])SODIUM[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
+    { id: "potassium", label: "Potassium", units: "mmol/L", patterns: [/(?:^|[^A-Z0-9])C?\s*K\+?[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i, /(?:^|[^A-Z0-9])POTASSIUM[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
+    { id: "chloride", label: "Chloride", units: "mmol/L", patterns: [/(?:^|[^A-Z0-9])C?\s*CL-?[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i, /(?:^|[^A-Z0-9])CHLORIDE[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
+    { id: "lactate", label: "Lactate", units: "mmol/L", patterns: [/(?:^|[^A-Z0-9])C?\s*LAC(?:TATE|T)?[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
+    { id: "albumin", label: "Albumin", units: "g/L", patterns: [/(?:^|[^A-Z0-9])(?:ALBUMIN|ALB)[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
+    { id: "fio2", label: "FiO2", units: "percent", patterns: [/(?:^|[^A-Z0-9])(?:FIO2|FI02|FO2\s*\(?I\)?|INSPIRED\s*O2)[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
+    { id: "glucose", label: "Glucose", units: "mg/dL", patterns: [/(?:^|[^A-Z0-9])C?\s*GLU(?:COSE)?[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
+    { id: "measuredOsmolality", label: "Measured osmolality", units: "mOsm/kg", patterns: [/(?:^|[^A-Z0-9])M?OSM(?:C|OLALITY)?[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
+    { id: "calcium", label: "Calcium", units: "mmol/L", patterns: [/(?:^|[^A-Z0-9])C?\s*CA\+{0,2}[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
+    { id: "urea", label: "Urea / BUN", units: "BUN_mg_dL", patterns: [/(?:^|[^A-Z0-9])(?:BUN|UREA)[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
+    { id: "creatinine", label: "Creatinine", units: "mg/dL", patterns: [/(?:^|[^A-Z0-9])(?:CREATININE|CREAT|CR)[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] }
   ];
 
   const example = {
-    pH: ["7.12", "unitless"],
-    paCO2: ["38", "mmHg"],
-    paO2: ["78", "mmHg"],
-    fio2: ["0.21", "fraction"],
-    hco3: ["12", "mmol/L"],
-    sbe: ["-15", "mmol/L"],
-    sodium: ["140", "mmol/L"],
-    potassium: ["4.8", "mmol/L"],
-    chloride: ["112", "mmol/L"],
-    lactate: ["6", "mmol/L"],
-    albumin: ["2.4", "g/dL"],
-    age: ["62", "years"],
-    glucose: ["165", "mg/dL"],
-    urea: ["42", "BUN_mg_dL"],
-    creatinine: ["2.2", "mg/dL"],
-    measuredOsmolality: ["318", "mOsm/kg"],
-    urineSodium: ["28", "mmol/L"],
-    urinePotassium: ["18", "mmol/L"],
-    urineChloride: ["30", "mmol/L"]
+    pH: ["7.003", "unitless"],
+    paCO2: ["49.3", "mmHg"],
+    paO2: ["50", "mmHg"],
+    fio2: ["100", "percent"],
+    hco3: ["11.7", "mmol/L"],
+    sbe: ["-17.4", "mmol/L"],
+    sodium: ["126", "mmol/L"],
+    potassium: ["3.6", "mmol/L"],
+    chloride: ["142", "mmol/L"],
+    lactate: ["12.1", "mmol/L"],
+    glucose: ["49", "mg/dL"],
+    measuredOsmolality: ["254.8", "mOsm/kg"],
+    calcium: ["0.84", "mmol/L"]
   };
 
   function optionLabel(unit) {
@@ -251,7 +241,7 @@
       if (key !== "core") panel.hidden = true;
     });
     groups.forEach((group) => panels[group.tab || "core"].append(makeSection(group)));
-    panels.more.append(makeSampleType());
+    panels.core.append(makeSampleType());
     panels.context.append(makeClinicalContext(), makeSettings());
     root.append(panels.core, panels.more, panels.context);
   }
@@ -391,8 +381,8 @@
     parsePatterns.forEach((field) => {
       let match = null;
       let matchedLine = "";
-      for (const line of normalized) {
-        for (const pattern of field.patterns) {
+      for (const pattern of field.patterns) {
+        for (const line of normalized) {
           match = line.match(pattern);
           if (match) {
             matchedLine = line;
@@ -433,8 +423,6 @@
         unit.value = item.unit;
       }
     });
-    if (!$("#age").value) $("#age").value = "";
-    if (!$("#fio2").value) $("#fio2").value = "0.21";
     updateCompletion();
   }
 
@@ -560,6 +548,11 @@
     return `<ul class="line-list">${items.map((item) => `<li class="${className || ""}">${escapeHTML(item)}</li>`).join("")}</ul>`;
   }
 
+  function orderedList(items, className) {
+    if (!items || !items.length) return "<p class=\"muted-line\">Not available from the entered values.</p>";
+    return `<ol class="step-list">${items.map((item) => `<li class="${className || ""}">${escapeHTML(item)}</li>`).join("")}</ol>`;
+  }
+
   function chips(report) {
     const tags = [];
     const status = report.severity.pH_status;
@@ -587,10 +580,11 @@
     const a = report.alactic_base_excess;
     const o = report.oxygenation;
     const pH = report.unit_normalization.converted_inputs.pH?.value || "";
+    const agLabel = report.unit_normalization.converted_inputs.albumin?.value !== "" ? "Corrected AG" : "Anion gap";
     return `
       <div class="metric-grid priority-metrics">
         ${metric("pH", pH, report.severity.pH_status)}
-        ${metric("Corrected AG", m.corrected_anion_gap, m.anion_gap_category)}
+        ${metric(agLabel, m.corrected_anion_gap, m.anion_gap_category)}
         ${metric("ABE", a.ABE, a.interpretation)}
         ${metric("A-a gradient", o.A_a_gradient, o.oxygenation_interpretation)}
       </div>
@@ -637,6 +631,11 @@
     const headline = report.primary_interpretation.primary_disorders[0] || report.severity.pH_status;
     const danger = report.severity.danger_flags.concat(report.validation_warnings || []);
     const unitNotes = report.unit_normalization.unit_warnings.concat(report.unit_normalization.blocked_calculations);
+    const steps = report.stepwise_interpretation || {
+      interpretation_steps: report.final_diagnosis,
+      calculations: [],
+      possible_reasons: report.likely_causes
+    };
     $("#report").className = "";
     $("#report").innerHTML = `
       <section class="diagnosis-card">
@@ -650,39 +649,38 @@
       </section>
 
       <div class="tab-strip report-tabs" role="tablist" aria-label="Report sections">
-        <button class="tab-button active" type="button" role="tab" aria-selected="true" data-report-tab="diagnosis">Diagnosis</button>
-        <button class="tab-button" type="button" role="tab" aria-selected="false" data-report-tab="causes">Causes</button>
+        <button class="tab-button active" type="button" role="tab" aria-selected="true" data-report-tab="summary">Step read</button>
         <button class="tab-button" type="button" role="tab" aria-selected="false" data-report-tab="stewart">Stewart</button>
         <button class="tab-button" type="button" role="tab" aria-selected="false" data-report-tab="values">Values</button>
         <button class="tab-button" type="button" role="tab" aria-selected="false" data-report-tab="json">JSON</button>
       </div>
 
       <div class="report-tab-panels">
-        <section class="report-tab-panel" data-report-panel="diagnosis">
-          <div class="two-col">
-            <section class="report-block">
-              <h3>Layered diagnosis</h3>
-              ${list(report.final_diagnosis)}
-            </section>
-            <section class="report-block">
-              <h3>Danger and unit checks</h3>
-              ${list(danger, "danger-line")}
-              ${unitNotes.length ? `<div class="clinical-warning">${escapeHTML(unitNotes.join(" "))}</div>` : ""}
-            </section>
-          </div>
-        </section>
-
-        <section class="report-tab-panel" data-report-panel="causes" hidden>
-          <div class="two-col">
-            <section class="report-block">
-              <h3>Likely causes</h3>
-              ${list(report.likely_causes)}
-            </section>
-            <section class="report-block">
-              <h3>Missing tests</h3>
-              ${list(report.recommended_missing_tests)}
-            </section>
-          </div>
+        <section class="report-tab-panel" data-report-panel="summary">
+          <section class="report-block">
+            <h3>Step-by-step read</h3>
+            ${orderedList(steps.interpretation_steps)}
+          </section>
+          <section class="report-block">
+            <h3>Calculations used</h3>
+            ${orderedList(steps.calculations, "calc-line")}
+          </section>
+          <section class="report-block">
+            <h3>Checks and missing tests</h3>
+            <div class="two-col">
+              <div>
+                ${list(danger, "danger-line")}
+                ${unitNotes.length ? `<div class="clinical-warning">${escapeHTML(unitNotes.join(" "))}</div>` : ""}
+              </div>
+              <div>
+                ${list(report.recommended_missing_tests)}
+              </div>
+            </div>
+          </section>
+          <section class="report-block">
+            <h3>Possible reasons</h3>
+            ${list(steps.possible_reasons)}
+          </section>
         </section>
 
         <section class="report-tab-panel" data-report-panel="stewart" hidden>
