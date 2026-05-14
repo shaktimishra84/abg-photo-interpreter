@@ -256,7 +256,8 @@
   function resetForm() {
     $("#abgForm").reset();
     selectedPhoto = null;
-    if ($("#photoInput")) $("#photoInput").value = "";
+    if ($("#uploadImageInput")) $("#uploadImageInput").value = "";
+    if ($("#cameraImageInput")) $("#cameraImageInput").value = "";
     $("#photoPreview").innerHTML = "<span>No image selected</span>";
     $("#ocrText").value = "";
     $("#ocrStatus").textContent = "No photo";
@@ -430,6 +431,8 @@
   function onPhotoSelected(event) {
     const file = event.target.files && event.target.files[0];
     selectedPhoto = file || null;
+    if (event.target.id === "uploadImageInput") $("#cameraImageInput").value = "";
+    if (event.target.id === "cameraImageInput") $("#uploadImageInput").value = "";
     $("#ocrText").value = "";
     $("#parsedSummary").innerHTML = "";
     if (!file) {
@@ -444,7 +447,8 @@
 
   function clearPhotoOnly() {
     selectedPhoto = null;
-    $("#photoInput").value = "";
+    $("#uploadImageInput").value = "";
+    $("#cameraImageInput").value = "";
     $("#photoPreview").innerHTML = "<span>No image selected</span>";
     $("#ocrText").value = "";
     $("#ocrStatus").textContent = "No photo";
@@ -599,7 +603,8 @@
     $("#loadExample").addEventListener("click", setExample);
     $("#resetForm").addEventListener("click", resetForm);
     $("#copyJson").addEventListener("click", copyJson);
-    $("#photoInput").addEventListener("change", onPhotoSelected);
+    $("#uploadImageInput").addEventListener("change", onPhotoSelected);
+    $("#cameraImageInput").addEventListener("change", onPhotoSelected);
     $("#readPhoto").addEventListener("click", readPhoto);
     $("#parseText").addEventListener("click", useOcrText);
     $("#clearPhoto").addEventListener("click", clearPhotoOnly);
