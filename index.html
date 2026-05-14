@@ -37,11 +37,18 @@
                 <span class="status-pill" id="ocrStatus">No photo</span>
               </div>
               <div class="photo-grid">
-                <label class="photo-drop">
-                  <input id="photoInput" type="file" accept="image/*" capture="environment">
-                  <span>Take or upload ABG photo</span>
-                  <small>Good light, flat page, include units where possible.</small>
-                </label>
+                <div class="photo-inputs">
+                  <label class="photo-drop">
+                    <input id="uploadImageInput" type="file" accept="image/*">
+                    <span>Upload image</span>
+                    <small>Use gallery, Files, or a laptop image.</small>
+                  </label>
+                  <label class="photo-drop">
+                    <input id="cameraImageInput" type="file" accept="image/*" capture="environment">
+                    <span>Take photo</span>
+                    <small>Use phone camera when available.</small>
+                  </label>
+                </div>
                 <div class="photo-preview" id="photoPreview">
                   <span>No image selected</span>
                 </div>
