@@ -1,0 +1,5 @@
+.tools/
+.gh-config/
+._*
+.DS_Store
+node_modules/
