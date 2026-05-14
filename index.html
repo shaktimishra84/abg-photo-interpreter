@@ -71,6 +71,9 @@
               <button class="tab-button" type="button" role="tab" aria-selected="false" data-input-tab="context">Context</button>
             </div>
             <div id="inputSections"></div>
+            <div class="input-action-bar">
+              <button class="primary-button" id="runAnalysisInline" type="button">Analyze</button>
+            </div>
           </form>
         </section>
 
@@ -80,12 +83,12 @@
               <h2>Interpretation</h2>
               <p id="reportTimestamp">Waiting for input</p>
             </div>
-            <button class="ghost-button icon-button" id="copyJson" type="button" title="Copy structured JSON">JSON</button>
+            <button class="ghost-button icon-button" id="copyJson" type="button" title="Copy structured JSON" aria-label="Copy structured JSON">JSON</button>
           </div>
 
-          <div id="report" class="report-empty">
+          <div id="report" class="report-empty" aria-live="polite" aria-atomic="false">
             <h3>Ready for analysis</h3>
-            <p>Complete the required fields and run the rule engine.</p>
+            <p>Enter pH, PaCO2, HCO3, and electrolytes to see the interpretation.</p>
           </div>
         </section>
       </main>

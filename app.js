@@ -5,6 +5,7 @@
   const engine = window.ABGEngine;
   let latestReport = null;
   let selectedPhoto = null;
+  let completionLabel = "";
 
   const coreFieldIds = ["pH", "paCO2", "paO2", "fio2", "hco3", "sbe", "sodium", "potassium", "chloride", "lactate", "sampleType"];
 
@@ -63,6 +64,21 @@
     ["arterial", "Arterial"],
     ["venous", "Venous"]
   ];
+
+  const fieldHints = {
+    pH: { min: "6.7", max: "7.8", title: "Usual arterial pH reference: 7.35-7.45" },
+    paCO2: { min: "5", max: "150", title: "Usual PaCO2 reference: 35-45 mmHg" },
+    paO2: { min: "20", max: "600", title: "Usual PaO2 reference depends on FiO2 and clinical context" },
+    fio2: { min: "0.21", max: "100", title: "Enter 21-100 when unit is %, or 0.21-1.0 when unit is fraction" },
+    hco3: { min: "2", max: "60", title: "Usual HCO3 reference: 22-26 mmol/L" },
+    sbe: { min: "-40", max: "40", title: "Usual base excess reference: about -2 to +2 mmol/L" },
+    sodium: { min: "100", max: "180", title: "Usual sodium reference: 135-145 mmol/L" },
+    potassium: { min: "1", max: "10", title: "Usual potassium reference: 3.5-5.0 mmol/L" },
+    chloride: { min: "60", max: "140", title: "Usual chloride reference: 95-110 mmol/L" },
+    lactate: { min: "0", max: "30", title: "Lactate >=4 mmol/L is a danger flag" },
+    glucose: { min: "0", max: "600", title: "Radiometer reports cGlu commonly in mg/dL" },
+    age: { min: "0", max: "120", title: "Age helps screen the A-a gradient" }
+  };
 
   const parsePatterns = [
     { id: "pH", label: "pH", units: "unitless", patterns: [/(?:^|[^A-Z0-9])PH[^0-9+\-.]{0,12}([+\-]?\d+(?:[.,]\d+)?)/i] },
@@ -134,6 +150,13 @@
     return section;
   }
 
+  function makeRequiredNote() {
+    const note = document.createElement("p");
+    note.className = "required-note";
+    note.textContent = "Required values are marked *.";
+    return note;
+  }
+
   function makeField(field) {
     const template = $("#fieldTemplate").content.cloneNode(true);
     const label = template.querySelector(".field");
@@ -152,6 +175,13 @@
     input.id = field.id;
     input.name = field.id;
     input.placeholder = "value";
+    if (fieldHints[field.id]) {
+      const hint = fieldHints[field.id];
+      input.min = hint.min || "";
+      input.max = hint.max || "";
+      input.title = hint.title;
+      labelText.title = hint.title;
+    }
     select.id = `${field.id}Unit`;
     select.name = `${field.id}Unit`;
     field.units.forEach((unit) => {
@@ -162,6 +192,11 @@
     });
     if (field.units.length === 1) {
       select.disabled = true;
+      label.classList.add("single-unit");
+      const unitReadout = document.createElement("span");
+      unitReadout.className = "unit-readout";
+      unitReadout.textContent = optionLabel(field.units[0]);
+      select.after(unitReadout);
     }
     return template;
   }
@@ -192,8 +227,10 @@
     const wrapper = document.createElement("section");
     wrapper.className = "input-section";
     wrapper.innerHTML = `
-      <div class="section-title"><h3>Clinical context</h3></div>
-      <div class="flags-grid" id="flagsGrid"></div>
+      <fieldset class="flags-fieldset">
+        <legend>Clinical context</legend>
+        <div class="flags-grid" id="flagsGrid"></div>
+      </fieldset>
     `;
     const flags = wrapper.querySelector("#flagsGrid");
     Object.entries(engine.FLAG_LABELS).forEach(([id, label]) => {
@@ -240,6 +277,7 @@
       panel.dataset.inputPanel = key;
       if (key !== "core") panel.hidden = true;
     });
+    panels.core.append(makeRequiredNote());
     groups.forEach((group) => panels[group.tab || "core"].append(makeSection(group)));
     panels.core.append(makeSampleType());
     panels.context.append(makeClinicalContext(), makeSettings());
@@ -283,9 +321,35 @@
     const coreDone = countEntered(coreFieldIds);
     const fullDone = countEntered(engine.REQUIRED_FIELDS);
     const status = $("#completionStatus");
-    status.textContent = `${coreDone}/${coreFieldIds.length} core`;
+    const nextLabel = `${coreDone}/${coreFieldIds.length} core`;
+    status.textContent = nextLabel;
     status.title = `${fullDone}/${engine.REQUIRED_FIELDS.length} full fields available`;
     status.classList.toggle("complete", coreDone === coreFieldIds.length);
+    if (completionLabel && completionLabel !== nextLabel) {
+      status.classList.remove("pulse");
+      const animate = window.requestAnimationFrame || ((callback) => callback());
+      animate(() => status.classList.add("pulse"));
+    }
+    completionLabel = nextLabel;
+    updateTabBadges();
+  }
+
+  function updateTabBadges() {
+    const raw = readForm();
+    const moreFields = groups
+      .filter((group) => group.tab === "more")
+      .flatMap((group) => group.fields)
+      .filter((field) => raw[field.id] && raw[field.id].value !== "").length;
+    const contextFlags = Object.keys(engine.FLAG_LABELS).filter((key) => raw.flags[key]).length;
+    setTabBadge("more", moreFields);
+    setTabBadge("context", contextFlags);
+  }
+
+  function setTabBadge(tab, count) {
+    const button = document.querySelector(`[data-input-tab="${tab}"]`);
+    if (!button) return;
+    button.dataset.badge = count ? String(count) : "";
+    button.classList.toggle("has-data", count > 0);
   }
 
   function setExample() {
@@ -303,7 +367,8 @@
     analyze();
   }
 
-  function resetForm() {
+  function resetForm(options = {}) {
+    if (options.confirm && !window.confirm("Clear all entered values and the current interpretation?")) return;
     $("#abgForm").reset();
     selectedPhoto = null;
     if ($("#uploadImageInput")) $("#uploadImageInput").value = "";
@@ -319,7 +384,7 @@
     latestReport = null;
     $("#reportTimestamp").textContent = "Waiting for input";
     $("#report").className = "report-empty";
-    $("#report").innerHTML = "<h3>Ready for analysis</h3><p>Complete the required fields and run the rule engine.</p>";
+    $("#report").innerHTML = "<h3>Ready for analysis</h3><p>Enter pH, PaCO2, HCO3, and electrolytes to see the interpretation.</p>";
     updateCompletion();
   }
 
@@ -441,8 +506,12 @@
           </div>
         `).join("")}
       </div>
+      <button class="dismiss-button" id="dismissParsedSummary" type="button" aria-label="Clear extracted value summary">Clear extracted summary</button>
       <div class="clinical-warning">Review every extracted value and unit before using the interpretation. Photo OCR can misread decimals, minus signs, and units.</div>
     `;
+    $("#dismissParsedSummary").addEventListener("click", () => {
+      root.innerHTML = "";
+    });
   }
 
   function useOcrText() {
@@ -565,9 +634,10 @@
     return `<div class="chip-row">${tags.map(([type, text]) => `<span class="tag ${type}">${escapeHTML(text)}</span>`).join("")}</div>`;
   }
 
-  function metric(label, value, note) {
+  function metric(label, value, note, tone) {
+    const toneClass = ["acid", "alkali", "warn", "good"].includes(tone) ? ` ${tone}` : "";
     return `
-      <div class="metric">
+      <div class="metric${toneClass}">
         <span>${escapeHTML(label)}</span>
         <strong>${escapeHTML(value || "-")}</strong>
         <small>${escapeHTML(note || "")}</small>
@@ -581,12 +651,16 @@
     const o = report.oxygenation;
     const pH = report.unit_normalization.converted_inputs.pH?.value || "";
     const agLabel = report.unit_normalization.converted_inputs.albumin?.value !== "" ? "Corrected AG" : "Anion gap";
+    const phTone = report.severity.pH_status === "Acidemia" ? "acid" : report.severity.pH_status === "Alkalemia" ? "alkali" : "good";
+    const agTone = m.anion_gap_category === "high anion gap" ? "acid" : m.anion_gap_category === "low anion gap" ? "warn" : "good";
+    const abeTone = Number(a.ABE) < -2 ? "acid" : Number(a.ABE) > 2 ? "alkali" : "good";
+    const oxyTone = String(o.oxygenation_interpretation || "").toLowerCase().includes("elevated") ? "warn" : "good";
     return `
       <div class="metric-grid priority-metrics">
-        ${metric("pH", pH, report.severity.pH_status)}
-        ${metric(agLabel, m.corrected_anion_gap, m.anion_gap_category)}
-        ${metric("ABE", a.ABE, a.interpretation)}
-        ${metric("A-a gradient", o.A_a_gradient, o.oxygenation_interpretation)}
+        ${metric("pH", pH, report.severity.pH_status, phTone)}
+        ${metric(agLabel, m.corrected_anion_gap, m.anion_gap_category, agTone)}
+        ${metric("ABE", a.ABE, a.interpretation, abeTone)}
+        ${metric("A-a gradient", o.A_a_gradient, o.oxygenation_interpretation, oxyTone)}
       </div>
     `;
   }
@@ -715,9 +789,24 @@
   }
 
   function analyze() {
-    latestReport = engine.analyze(readForm(), settings());
-    renderReport(latestReport);
-    updateCompletion();
+    setAnalyzing(true);
+    try {
+      latestReport = engine.analyze(readForm(), settings());
+      renderReport(latestReport);
+      updateCompletion();
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
+  function setAnalyzing(active) {
+    ["#runAnalysis", "#runAnalysisInline"].forEach((selector) => {
+      const button = $(selector);
+      if (!button) return;
+      button.disabled = active;
+      button.textContent = active ? "Analyzing..." : "Analyze";
+    });
+    $("#report").setAttribute("aria-busy", String(active));
   }
 
   function copyJson() {
@@ -732,8 +821,9 @@
 
   function bindEvents() {
     $("#runAnalysis").addEventListener("click", analyze);
+    $("#runAnalysisInline").addEventListener("click", analyze);
     $("#loadExample").addEventListener("click", setExample);
-    $("#resetForm").addEventListener("click", resetForm);
+    $("#resetForm").addEventListener("click", () => resetForm({ confirm: true }));
     $("#copyJson").addEventListener("click", copyJson);
     $("#uploadImageInput").addEventListener("change", onPhotoSelected);
     $("#cameraImageInput").addEventListener("change", onPhotoSelected);
@@ -742,6 +832,12 @@
     $("#clearPhoto").addEventListener("click", clearPhotoOnly);
     $("#abgForm").addEventListener("input", updateCompletion);
     $("#abgForm").addEventListener("change", updateCompletion);
+    $("#abgForm").addEventListener("keydown", (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+        event.preventDefault();
+        analyze();
+      }
+    });
   }
 
   renderInputs();
