@@ -230,7 +230,13 @@ h3 {
 .photo-grid {
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(0, 1fr) 150px;
+  grid-template-columns: minmax(0, 1fr) 170px;
+}
+
+.photo-inputs {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .photo-drop {
@@ -244,7 +250,7 @@ h3 {
   cursor: pointer;
   display: grid;
   min-height: 118px;
-  padding: 16px;
+  padding: 14px;
   place-content: center;
   text-align: center;
 }
@@ -678,6 +684,7 @@ select:focus {
   .field-grid,
   .flags-grid,
   .photo-grid,
+  .photo-inputs,
   .two-col,
   .metric-grid {
     grid-template-columns: 1fr;
