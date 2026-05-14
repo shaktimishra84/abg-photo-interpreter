@@ -12,6 +12,7 @@
         <div>
           <p class="eyebrow">Rule-based clinical calculator</p>
           <h1>ABG Interpreter</h1>
+          <p class="topbar-copy">Photo first. Confirm the core values. Add deeper context only when it is available.</p>
         </div>
         <div class="topbar-actions">
           <button class="ghost-button" id="loadExample" type="button" title="Load a mixed acidosis example">Example</button>
@@ -24,10 +25,10 @@
         <section class="input-panel" aria-label="ABG inputs">
           <div class="panel-head">
             <div>
-              <h2>Patient Data</h2>
-              <p>Enter raw values and units exactly as reported.</p>
+              <h2>Capture and Values</h2>
+              <p>Start with the image, then confirm the main ABG numbers.</p>
             </div>
-            <span class="status-pill" id="completionStatus">0 required</span>
+            <span class="status-pill" id="completionStatus">0 core</span>
           </div>
 
           <form id="abgForm" autocomplete="off">
@@ -58,24 +59,18 @@
                 <button class="ghost-button" id="parseText" type="button">Use Text</button>
                 <button class="ghost-button" id="clearPhoto" type="button">Clear Photo</button>
               </div>
-              <textarea id="ocrText" rows="5" placeholder="OCR text appears here. You can edit it, then press Use Text."></textarea>
+              <details class="ocr-details">
+                <summary>OCR text</summary>
+                <textarea id="ocrText" rows="5" placeholder="OCR text appears here. You can edit it, then press Use Text."></textarea>
+              </details>
               <div id="parsedSummary" class="parsed-summary"></div>
             </section>
-            <div id="inputSections"></div>
-            <div class="form-footer">
-              <label class="field compact-field">
-                <span>Lab AG upper limit</span>
-                <input id="agUpperLimit" inputmode="decimal" type="number" step="0.1" value="12">
-              </label>
-              <label class="field compact-field">
-                <span>Barometric pressure</span>
-                <input id="barometricPressure" inputmode="decimal" type="number" step="1" value="760">
-              </label>
-              <label class="field compact-field">
-                <span>Respiratory quotient</span>
-                <input id="respiratoryQuotient" inputmode="decimal" type="number" step="0.01" value="0.8">
-              </label>
+            <div class="tab-strip input-tabs" id="inputTabs" role="tablist" aria-label="Input groups">
+              <button class="tab-button active" type="button" role="tab" aria-selected="true" data-input-tab="core">Core</button>
+              <button class="tab-button" type="button" role="tab" aria-selected="false" data-input-tab="more">More values</button>
+              <button class="tab-button" type="button" role="tab" aria-selected="false" data-input-tab="context">Context</button>
             </div>
+            <div id="inputSections"></div>
           </form>
         </section>
 

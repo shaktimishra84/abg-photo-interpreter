@@ -6,31 +6,42 @@
   let latestReport = null;
   let selectedPhoto = null;
 
+  const coreFieldIds = ["pH", "paCO2", "hco3", "sbe", "sodium", "chloride", "lactate", "albumin"];
+
   const groups = [
     {
-      title: "Required blood gas",
+      title: "Core blood gas",
+      tab: "core",
       fields: [
         { id: "pH", label: "pH", units: ["unitless"], required: true },
         { id: "paCO2", label: "PaCO2", units: ["auto", "mmHg", "kPa"], required: true },
-        { id: "paO2", label: "PaO2", units: ["auto", "mmHg", "kPa"], required: true },
-        { id: "fio2", label: "FiO2", units: ["auto", "fraction", "percent"], required: true },
         { id: "hco3", label: "HCO3", units: ["mmol/L", "mEq/L"], required: true },
         { id: "sbe", label: "SBE / BE", units: ["mmol/L"], required: true }
       ]
     },
     {
-      title: "Required chemistry",
+      title: "Core chemistry",
+      tab: "core",
       fields: [
         { id: "sodium", label: "Sodium", units: ["mmol/L", "mEq/L"], required: true },
-        { id: "potassium", label: "Potassium", units: ["mmol/L", "mEq/L"], required: true },
         { id: "chloride", label: "Chloride", units: ["mmol/L", "mEq/L"], required: true },
         { id: "lactate", label: "Lactate", units: ["auto", "mmol/L", "mg/dL", "mEq/L"], required: true },
-        { id: "albumin", label: "Albumin", units: ["auto", "g/L", "g/dL"], required: true },
+        { id: "albumin", label: "Albumin", units: ["auto", "g/L", "g/dL"], required: true }
+      ]
+    },
+    {
+      title: "Oxygen and patient",
+      tab: "more",
+      fields: [
+        { id: "paO2", label: "PaO2", units: ["auto", "mmHg", "kPa"], required: true },
+        { id: "fio2", label: "FiO2", units: ["auto", "fraction", "percent"], required: true },
+        { id: "potassium", label: "Potassium", units: ["mmol/L", "mEq/L"], required: true },
         { id: "age", label: "Age", units: ["years"], required: true }
       ]
     },
     {
-      title: "Recommended labs",
+      title: "Extra labs",
+      tab: "more",
       fields: [
         { id: "glucose", label: "Glucose", units: ["auto", "mmol/L", "mg/dL"] },
         { id: "urea", label: "Urea / BUN", units: ["auto", "urea_mmol_L", "BUN_mg_dL", "urea_mg_dL"] },
@@ -44,6 +55,7 @@
     },
     {
       title: "Urine indices",
+      tab: "more",
       fields: [
         { id: "urineSodium", label: "Urine sodium", units: ["mmol/L", "mEq/L"] },
         { id: "urinePotassium", label: "Urine potassium", units: ["mmol/L", "mEq/L"] },
@@ -168,14 +180,13 @@
     const wrapper = document.createElement("section");
     wrapper.className = "input-section";
     wrapper.innerHTML = `
-      <div class="section-title"><h3>Sample and clinical flags</h3></div>
+      <div class="section-title"><h3>Sample</h3></div>
       <div class="field-grid">
         <label class="field wide-field single-control">
           <span>Sample type<span class="required-mark">*</span></span>
           <select id="sampleType"></select>
         </label>
       </div>
-      <div class="flags-grid" id="flagsGrid"></div>
     `;
     const select = wrapper.querySelector("#sampleType");
     sampleOptions.forEach(([value, label]) => {
@@ -184,6 +195,16 @@
       option.textContent = label;
       select.append(option);
     });
+    return wrapper;
+  }
+
+  function makeClinicalContext() {
+    const wrapper = document.createElement("section");
+    wrapper.className = "input-section";
+    wrapper.innerHTML = `
+      <div class="section-title"><h3>Clinical context</h3></div>
+      <div class="flags-grid" id="flagsGrid"></div>
+    `;
     const flags = wrapper.querySelector("#flagsGrid");
     Object.entries(engine.FLAG_LABELS).forEach(([id, label]) => {
       const item = document.createElement("label");
@@ -194,10 +215,45 @@
     return wrapper;
   }
 
+  function makeSettings() {
+    const wrapper = document.createElement("section");
+    wrapper.className = "input-section";
+    wrapper.innerHTML = `
+      <div class="section-title"><h3>Calculation settings</h3></div>
+      <div class="settings-grid">
+        <label class="field single-control">
+          <span>Lab AG upper limit</span>
+          <input id="agUpperLimit" inputmode="decimal" type="number" step="0.1" value="12">
+        </label>
+        <label class="field single-control">
+          <span>Barometric pressure</span>
+          <input id="barometricPressure" inputmode="decimal" type="number" step="1" value="760">
+        </label>
+        <label class="field single-control">
+          <span>Respiratory quotient</span>
+          <input id="respiratoryQuotient" inputmode="decimal" type="number" step="0.01" value="0.8">
+        </label>
+      </div>
+    `;
+    return wrapper;
+  }
+
   function renderInputs() {
     const root = $("#inputSections");
-    groups.forEach((group) => root.append(makeSection(group)));
-    root.append(makeSampleType());
+    const panels = {
+      core: document.createElement("div"),
+      more: document.createElement("div"),
+      context: document.createElement("div")
+    };
+    Object.entries(panels).forEach(([key, panel]) => {
+      panel.className = "input-tab-panel";
+      panel.dataset.inputPanel = key;
+      if (key !== "core") panel.hidden = true;
+    });
+    groups.forEach((group) => panels[group.tab || "core"].append(makeSection(group)));
+    panels.more.append(makeSampleType());
+    panels.context.append(makeClinicalContext(), makeSettings());
+    root.append(panels.core, panels.more, panels.context);
   }
 
   function readForm() {
@@ -225,17 +281,21 @@
     };
   }
 
-  function requiredCount() {
+  function countEntered(fieldIds) {
     const raw = readForm();
-    return engine.REQUIRED_FIELDS.filter((field) => {
+    return fieldIds.filter((field) => {
       if (field === "sampleType") return Boolean(raw.sampleType);
       return raw[field] && raw[field].value !== "";
     }).length;
   }
 
   function updateCompletion() {
-    const done = requiredCount();
-    $("#completionStatus").textContent = `${done}/${engine.REQUIRED_FIELDS.length} required`;
+    const coreDone = countEntered(coreFieldIds);
+    const fullDone = countEntered(engine.REQUIRED_FIELDS);
+    const status = $("#completionStatus");
+    status.textContent = `${coreDone}/${coreFieldIds.length} core`;
+    status.title = `${fullDone}/${engine.REQUIRED_FIELDS.length} full fields available`;
+    status.classList.toggle("complete", coreDone === coreFieldIds.length);
   }
 
   function setExample() {
@@ -265,6 +325,7 @@
     $("#agUpperLimit").value = "12";
     $("#barometricPressure").value = "760";
     $("#respiratoryQuotient").value = "0.8";
+    activateInputTab("core");
     latestReport = null;
     $("#reportTimestamp").textContent = "Waiting for input";
     $("#report").className = "report-empty";
@@ -383,12 +444,17 @@
       root.innerHTML = "<div class=\"clinical-warning\">No ABG values were confidently extracted. Try cropping the image around the result table or paste OCR text manually.</div>";
       return;
     }
-    root.innerHTML = values.map((item) => `
-      <div class="parsed-row">
-        <span>${escapeHTML(item.label)}</span>
-        <strong>${escapeHTML(item.value)} ${escapeHTML(optionLabel(item.unit))}</strong>
+    root.innerHTML = `
+      <div class="parsed-chip-row">
+        ${values.map((item) => `
+          <div class="parsed-row">
+            <span>${escapeHTML(item.label)}</span>
+            <strong>${escapeHTML(item.value)} ${escapeHTML(optionLabel(item.unit))}</strong>
+          </div>
+        `).join("")}
       </div>
-    `).join("") + "<div class=\"clinical-warning\">Review every extracted value and unit before using the interpretation. Photo OCR can misread decimals, minus signs, and units.</div>";
+      <div class="clinical-warning">Review every extracted value and unit before using the interpretation. Photo OCR can misread decimals, minus signs, and units.</div>
+    `;
   }
 
   function useOcrText() {
@@ -455,6 +521,40 @@
     $("#parsedSummary").innerHTML = "";
   }
 
+  function activateInputTab(tab) {
+    document.querySelectorAll("[data-input-tab]").forEach((button) => {
+      const active = button.dataset.inputTab === tab;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", String(active));
+    });
+    document.querySelectorAll("[data-input-panel]").forEach((panel) => {
+      panel.hidden = panel.dataset.inputPanel !== tab;
+    });
+  }
+
+  function bindInputTabs() {
+    document.querySelectorAll("[data-input-tab]").forEach((button) => {
+      button.addEventListener("click", () => activateInputTab(button.dataset.inputTab));
+    });
+  }
+
+  function activateReportTab(tab) {
+    document.querySelectorAll("[data-report-tab]").forEach((button) => {
+      const active = button.dataset.reportTab === tab;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", String(active));
+    });
+    document.querySelectorAll("[data-report-panel]").forEach((panel) => {
+      panel.hidden = panel.dataset.reportPanel !== tab;
+    });
+  }
+
+  function bindReportTabs() {
+    document.querySelectorAll("[data-report-tab]").forEach((button) => {
+      button.addEventListener("click", () => activateReportTab(button.dataset.reportTab));
+    });
+  }
+
   function list(items, className) {
     if (!items || !items.length) return "<p class=\"muted-line\">None detected from available data.</p>";
     return `<ul class="line-list">${items.map((item) => `<li class="${className || ""}">${escapeHTML(item)}</li>`).join("")}</ul>`;
@@ -484,15 +584,25 @@
 
   function metricGrid(report) {
     const m = report.metabolic_analysis;
-    const s = report.stewart_light;
     const a = report.alactic_base_excess;
     const o = report.oxygenation;
+    const pH = report.unit_normalization.converted_inputs.pH?.value || "";
     return `
-      <div class="metric-grid">
+      <div class="metric-grid priority-metrics">
+        ${metric("pH", pH, report.severity.pH_status)}
         ${metric("Corrected AG", m.corrected_anion_gap, m.anion_gap_category)}
-        ${metric("Delta gap", m.delta_AG !== "" ? m.delta_AG - m.delta_HCO3 : "", m.delta_interpretation)}
         ${metric("ABE", a.ABE, a.interpretation)}
         ${metric("A-a gradient", o.A_a_gradient, o.oxygenation_interpretation)}
+      </div>
+    `;
+  }
+
+  function stewartMetricGrid(report) {
+    const s = report.stewart_light;
+    const m = report.metabolic_analysis;
+    return `
+      <div class="metric-grid stewart-metrics">
+        ${metric("Delta gap", m.delta_AG !== "" ? m.delta_AG - m.delta_HCO3 : "", m.delta_interpretation)}
         ${metric("SBE SID", s.SBE_SID, "Strong ion effect")}
         ${metric("SBE albumin", s.SBE_albumin, "Weak acid effect")}
         ${metric("SBE UI", s.SBE_unmeasured_ions, "Unmeasured ions")}
@@ -539,47 +649,71 @@
         ${metricGrid(report)}
       </section>
 
-      <div class="two-col">
-        <section class="report-block">
-          <h3>Layered diagnosis</h3>
-          ${list(report.final_diagnosis)}
-        </section>
-        <section class="report-block">
-          <h3>Danger and unit checks</h3>
-          ${list(danger, "danger-line")}
-          ${unitNotes.length ? `<div class="clinical-warning">${escapeHTML(unitNotes.join(" "))}</div>` : ""}
-        </section>
+      <div class="tab-strip report-tabs" role="tablist" aria-label="Report sections">
+        <button class="tab-button active" type="button" role="tab" aria-selected="true" data-report-tab="diagnosis">Diagnosis</button>
+        <button class="tab-button" type="button" role="tab" aria-selected="false" data-report-tab="causes">Causes</button>
+        <button class="tab-button" type="button" role="tab" aria-selected="false" data-report-tab="stewart">Stewart</button>
+        <button class="tab-button" type="button" role="tab" aria-selected="false" data-report-tab="values">Values</button>
+        <button class="tab-button" type="button" role="tab" aria-selected="false" data-report-tab="json">JSON</button>
       </div>
 
-      <div class="two-col">
-        <section class="report-block">
-          <h3>Likely causes</h3>
-          ${list(report.likely_causes)}
+      <div class="report-tab-panels">
+        <section class="report-tab-panel" data-report-panel="diagnosis">
+          <div class="two-col">
+            <section class="report-block">
+              <h3>Layered diagnosis</h3>
+              ${list(report.final_diagnosis)}
+            </section>
+            <section class="report-block">
+              <h3>Danger and unit checks</h3>
+              ${list(danger, "danger-line")}
+              ${unitNotes.length ? `<div class="clinical-warning">${escapeHTML(unitNotes.join(" "))}</div>` : ""}
+            </section>
+          </div>
         </section>
-        <section class="report-block">
-          <h3>Missing tests</h3>
-          ${list(report.recommended_missing_tests)}
+
+        <section class="report-tab-panel" data-report-panel="causes" hidden>
+          <div class="two-col">
+            <section class="report-block">
+              <h3>Likely causes</h3>
+              ${list(report.likely_causes)}
+            </section>
+            <section class="report-block">
+              <h3>Missing tests</h3>
+              ${list(report.recommended_missing_tests)}
+            </section>
+          </div>
+        </section>
+
+        <section class="report-tab-panel" data-report-panel="stewart" hidden>
+          <section class="report-block">
+            ${stewartMetricGrid(report)}
+          </section>
+          <section class="report-block">
+            <h3>Stewart light</h3>
+            ${list(report.stewart_light.interpretation)}
+          </section>
+        </section>
+
+        <section class="report-tab-panel" data-report-panel="values" hidden>
+          <section class="report-block">
+            <h3>Converted values</h3>
+            ${convertedRows(report)}
+          </section>
+        </section>
+
+        <section class="report-tab-panel" data-report-panel="json" hidden>
+          <section class="report-block">
+            <h3>Structured output</h3>
+            <pre class="json-box">${escapeHTML(JSON.stringify(report, null, 2))}</pre>
+          </section>
         </section>
       </div>
-
-      <section class="report-block">
-        <h3>Stewart light</h3>
-        ${list(report.stewart_light.interpretation)}
-      </section>
-
-      <section class="report-block">
-        <h3>Converted values</h3>
-        ${convertedRows(report)}
-      </section>
-
-      <section class="report-block">
-        <h3>Structured output</h3>
-        <pre class="json-box">${escapeHTML(JSON.stringify(report, null, 2))}</pre>
-      </section>
 
       <div class="clinical-warning">${escapeHTML(report.clinical_warning)}</div>
     `;
     $("#reportTimestamp").textContent = `Calculated ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+    bindReportTabs();
   }
 
   function analyze() {
@@ -614,5 +748,6 @@
 
   renderInputs();
   bindEvents();
+  bindInputTabs();
   updateCompletion();
 })();
