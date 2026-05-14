@@ -1,0 +1,9 @@
+{
+  "name": "abg-photo-interpreter",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Static rule-based ABG interpreter with photo OCR-assisted input.",
+  "scripts": {
+    "test": "node smoke-test.js"
+  }
+}
