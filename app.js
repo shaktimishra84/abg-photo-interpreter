@@ -30,6 +30,7 @@
         { id: "potassium", label: "Potassium", units: ["mmol/L", "mEq/L"], required: true },
         { id: "chloride", label: "Chloride", units: ["mmol/L", "mEq/L"], required: true },
         { id: "lactate", label: "Lactate", units: ["mmol/L", "mg/dL", "mEq/L"], required: true },
+        { id: "albumin", label: "Albumin", units: ["g/L", "g/dL"] },
         { id: "glucose", label: "Glucose", units: ["mg/dL", "mmol/L"] }
       ]
     },
@@ -38,7 +39,6 @@
       tab: "more",
       fields: [
         { id: "age", label: "Age", units: ["years"] },
-        { id: "albumin", label: "Albumin", units: ["g/L", "g/dL"] },
         { id: "urea", label: "Urea / BUN", units: ["BUN_mg_dL", "urea_mmol_L", "urea_mg_dL"] },
         { id: "creatinine", label: "Creatinine", units: ["mg/dL", "micromol/L"] },
         { id: "measuredOsmolality", label: "Measured osmolality", units: ["mOsm/kg"] },
@@ -76,6 +76,7 @@
     potassium: { min: "1", max: "10", title: "Usual potassium reference: 3.5-5.0 mmol/L" },
     chloride: { min: "60", max: "140", title: "Usual chloride reference: 95-110 mmol/L" },
     lactate: { min: "0", max: "30", title: "Lactate >=4 mmol/L is a danger flag" },
+    albumin: { min: "0", max: "60", title: "Albumin allows albumin-corrected anion gap calculation" },
     glucose: { min: "0", max: "600", title: "Radiometer reports cGlu commonly in mg/dL" },
     age: { min: "0", max: "120", title: "Age helps screen the A-a gradient" }
   };
