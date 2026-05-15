@@ -844,6 +844,87 @@ select:focus {
   margin-top: 4px;
 }
 
+.stewart-worked {
+  display: grid;
+}
+
+.stewart-step {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 34px minmax(0, 1fr);
+  padding: 15px 0;
+}
+
+.stewart-step:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.stewart-step:last-child {
+  padding-bottom: 0;
+}
+
+.stewart-step-number {
+  align-items: center;
+  background: var(--oxygen);
+  border-radius: 50%;
+  color: #fff;
+  display: flex;
+  font-size: 0.9rem;
+  font-weight: 900;
+  height: 30px;
+  justify-content: center;
+  margin-top: 2px;
+  width: 30px;
+}
+
+.stewart-step-body h4 {
+  font-size: 1rem;
+  margin-bottom: 4px;
+}
+
+.stewart-full-form,
+.stewart-meaning {
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.stewart-equations {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.equation-row {
+  align-items: start;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 94px minmax(0, 1fr);
+}
+
+.equation-row span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  padding-top: 7px;
+  text-transform: uppercase;
+}
+
+.equation-row code {
+  background: #f6f9f8;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  display: block;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  line-height: 1.35;
+  padding: 7px 9px;
+  white-space: normal;
+  word-break: break-word;
+}
+
 .report-block {
   background: #fff;
   border: 1px solid var(--line);
@@ -1016,5 +1097,22 @@ select:focus {
   .metric-grid,
   .settings-grid {
     grid-template-columns: 1fr;
+  }
+
+  .stewart-step {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .stewart-step-number {
+    height: 26px;
+    width: 26px;
+  }
+
+  .equation-row {
+    grid-template-columns: 1fr;
+  }
+
+  .equation-row span {
+    padding-top: 0;
   }
 }

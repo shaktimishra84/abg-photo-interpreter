@@ -637,10 +637,11 @@
 
   function metric(label, value, note, tone) {
     const toneClass = ["acid", "alkali", "warn", "good"].includes(tone) ? ` ${tone}` : "";
+    const displayValue = value === "" || value === null || value === undefined ? "-" : value;
     return `
       <div class="metric${toneClass}">
         <span>${escapeHTML(label)}</span>
-        <strong>${escapeHTML(value || "-")}</strong>
+        <strong>${escapeHTML(displayValue)}</strong>
         <small>${escapeHTML(note || "")}</small>
       </div>
     `;
@@ -666,21 +667,103 @@
     `;
   }
 
-  function stewartMetricGrid(report) {
+  function stewartWorkedSteps(report) {
     const s = report.stewart_light;
-    const toneFor = (value) => Number(value) < -2 ? "acid" : Number(value) > 2 ? "alkali" : "good";
-    const uiTone = Number(s.SBE_unmeasured_ions) < -2 ? "acid" : Number(s.SBE_unmeasured_ions) > 2 ? "warn" : "good";
-    const residualTone = Number(s.residual_UI_after_lactate) < -2 ? "acid" : Number(s.residual_UI_after_lactate) > 2 ? "warn" : "good";
-    const abeTone = Number(s.ABE) < -2 ? "acid" : Number(s.ABE) > 2 ? "alkali" : "good";
+    const hasValue = (value) => value !== "" && value !== null && value !== undefined;
+    const value = (item, unit) => hasValue(item) ? `${item}${unit ? ` ${unit}` : ""}` : "not available";
+    const pHOutsideReferenceBand = Number(s.pH) < 7.3 || Number(s.pH) > 7.5;
+    const referenceFormula = pHOutsideReferenceBand
+      ? "Reference Na-Cl = 35 + 15 x (7.40 - pH)"
+      : "Reference Na-Cl = 35 when pH is between 7.30 and 7.50";
+    const referenceCalculation = pHOutsideReferenceBand
+      ? `35 + 15 x (7.40 - ${value(s.pH)}) = ${value(s.pH_adjusted_reference_Na_minus_Cl, "mmol/L")}`
+      : `35 = ${value(s.pH_adjusted_reference_Na_minus_Cl, "mmol/L")}`;
+    const lactateCalculation = hasValue(s.lactate_mmol_per_L)
+      ? `${value(s.SBE_unmeasured_ions)} + ${value(s.lactate_mmol_per_L)} = ${value(s.residual_UI_after_lactate, "mmol/L")}`
+      : s.residual_UI_after_lactate_interpretation || "lactate not available";
+    const abeCalculation = hasValue(s.ABE)
+      ? `${value(s.SBE)} + ${value(s.lactate_mmol_per_L)} = ${value(s.ABE, "mmol/L")}`
+      : s.ABE_interpretation || "lactate not available";
+    const step = (number, title, fullForm, rows, interpretation) => `
+      <article class="stewart-step">
+        <div class="stewart-step-number">${number}</div>
+        <div class="stewart-step-body">
+          <h4>${escapeHTML(title)}</h4>
+          <p class="stewart-full-form">${escapeHTML(fullForm)}</p>
+          <div class="stewart-equations">
+            ${rows.map(([label, text]) => `
+              <div class="equation-row">
+                <span>${escapeHTML(label)}</span>
+                <code>${escapeHTML(text)}</code>
+              </div>
+            `).join("")}
+          </div>
+          <p class="stewart-meaning">${escapeHTML(interpretation)}</p>
+        </div>
+      </article>
+    `;
     return `
-      <div class="metric-grid stewart-metrics">
-        ${metric("Na-Cl", s.Na_minus_Cl, "Measured SID screen")}
-        ${metric("Ref Na-Cl", s.pH_adjusted_reference_Na_minus_Cl, "pH-adjusted")}
-        ${metric("SBE SID", s.SBE_SID, s.SBE_SID_interpretation, toneFor(s.SBE_SID))}
-        ${metric("SBE albumin", s.SBE_albumin, s.SBE_albumin_interpretation, toneFor(s.SBE_albumin))}
-        ${metric("SBE UI", s.SBE_unmeasured_ions, s.SBE_unmeasured_ions_interpretation, uiTone)}
-        ${metric("UI after lactate", s.residual_UI_after_lactate, s.residual_UI_after_lactate_interpretation, residualTone)}
-        ${metric("ABE", s.ABE, s.ABE_interpretation, abeTone)}
+      <div class="stewart-worked">
+        ${step(
+          1,
+          "Sodium-chloride difference and pH-adjusted reference",
+          "Na-Cl means sodium minus chloride. This screens the apparent strong ion difference before partitioning base excess.",
+          [
+            ["Formula", "Na-Cl difference = Na - Cl"],
+            ["Calculation", `${value(s.Na)} - ${value(s.Cl)} = ${value(s.Na_minus_Cl, "mmol/L")}`],
+            ["Formula", referenceFormula],
+            ["Calculation", referenceCalculation],
+            ["Result", `Na-Cl difference ${value(s.Na_minus_Cl, "mmol/L")}; reference ${value(s.pH_adjusted_reference_Na_minus_Cl, "mmol/L")}`]
+          ],
+          "A value above the reference supports a high strong ion difference / alkalinising chloride pattern; a value below the reference supports low SID acidosis."
+        )}
+        ${step(
+          2,
+          "Strong ion effect",
+          "SBE_SID means Standard Base Excess attributable to Strong Ion Difference, mainly the sodium-chloride relationship.",
+          [
+            ["Formula", "SBE_SID = (Na-Cl difference) - pH-adjusted reference Na-Cl"],
+            ["Calculation", `${value(s.Na_minus_Cl)} - ${value(s.pH_adjusted_reference_Na_minus_Cl)} = ${value(s.SBE_SID, "mmol/L")}`],
+            ["Result", `${value(s.SBE_SID, "mmol/L")}: ${s.SBE_SID_interpretation || "not available"}`]
+          ],
+          "Negative SBE_SID is acidifying. Positive SBE_SID is alkalinising."
+        )}
+        ${step(
+          3,
+          "Albumin / weak acid effect",
+          "SBE_Albumin means Standard Base Excess attributable to albumin / weak acid effect.",
+          [
+            ["Formula", "SBE_Albumin = 0.3 x (40 - albumin in g/L)"],
+            ["Calculation", `0.3 x (40 - ${value(s.albumin_g_per_L)}) = ${value(s.SBE_albumin, "mmol/L")}`],
+            ["Result", `${value(s.SBE_albumin, "mmol/L")}: ${s.SBE_albumin_interpretation || "not available"}`]
+          ],
+          "Low albumin is alkalinising and can mask lactate, ketone, renal, toxic alcohol, or other fixed-acid acidosis."
+        )}
+        ${step(
+          4,
+          "Unmeasured ion effect",
+          "SBE_UI means Standard Base Excess attributable to Unmeasured Ions after removing strong ion and albumin effects.",
+          [
+            ["Formula", "SBE_UI = SBE - SBE_SID - SBE_Albumin"],
+            ["Calculation", `${value(s.SBE)} - (${value(s.SBE_SID)}) - (${value(s.SBE_albumin)}) = ${value(s.SBE_unmeasured_ions, "mmol/L")}`],
+            ["Result", `${value(s.SBE_unmeasured_ions, "mmol/L")}: ${s.SBE_unmeasured_ions_interpretation || "not available"}`]
+          ],
+          "Negative SBE_UI suggests unmeasured anion acidosis. Positive SBE_UI should trigger a unit/analyzer check before rare unmeasured cations."
+        )}
+        ${step(
+          5,
+          "Lactate and non-lactate fixed acid effect",
+          "Residual_UI_after_lactate means the remaining unmeasured ion effect after lactate. ABE means Alactic Base Excess.",
+          [
+            ["Formula", "Residual_UI_after_lactate = SBE_UI + lactate"],
+            ["Calculation", lactateCalculation],
+            ["Result", `${value(s.residual_UI_after_lactate, "mmol/L")}: ${s.residual_UI_after_lactate_interpretation || "not available"}`],
+            ["Formula", "ABE = SBE + lactate"],
+            ["Calculation", abeCalculation],
+            ["Result", `${value(s.ABE, "mmol/L")}: ${s.ABE_interpretation || "not available"}`]
+          ],
+          "This separates lactate-driven acidosis from additional non-lactate fixed acids such as ketones, uremic acids, toxic alcohol metabolites, salicylate, pyroglutamate, phosphate, or sulfate."
+        )}
       </div>
     `;
   }
@@ -779,11 +862,8 @@
 
         <section class="report-tab-panel" data-report-panel="stewart" hidden>
           <section class="report-block">
-            ${stewartMetricGrid(report)}
-          </section>
-          <section class="report-block">
             <h3>Stewart light analysis</h3>
-            ${list(report.stewart_light.interpretation)}
+            ${stewartWorkedSteps(report)}
             ${stewartStatus(report)}
           </section>
         </section>
