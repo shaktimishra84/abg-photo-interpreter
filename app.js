@@ -7,7 +7,7 @@
   let selectedPhoto = null;
   let completionLabel = "";
 
-  const coreFieldIds = ["pH", "paCO2", "paO2", "fio2", "hco3", "sbe", "sodium", "potassium", "chloride", "lactate", "sampleType"];
+  const coreFieldIds = ["pH", "paCO2", "paO2", "fio2", "hco3", "sbe", "sodium", "potassium", "chloride", "albumin", "lactate", "sampleType"];
 
   const groups = [
     {
@@ -30,7 +30,7 @@
         { id: "potassium", label: "Potassium", units: ["mmol/L", "mEq/L"], required: true },
         { id: "chloride", label: "Chloride", units: ["mmol/L", "mEq/L"], required: true },
         { id: "lactate", label: "Lactate", units: ["mmol/L", "mg/dL", "mEq/L"], required: true },
-        { id: "albumin", label: "Albumin", units: ["g/L", "g/dL"] },
+        { id: "albumin", label: "Albumin", units: ["g/L", "g/dL"], required: true },
         { id: "glucose", label: "Glucose", units: ["mg/dL", "mmol/L"] }
       ]
     },
@@ -668,15 +668,34 @@
 
   function stewartMetricGrid(report) {
     const s = report.stewart_light;
-    const m = report.metabolic_analysis;
+    const toneFor = (value) => Number(value) < -2 ? "acid" : Number(value) > 2 ? "alkali" : "good";
+    const uiTone = Number(s.SBE_unmeasured_ions) < -2 ? "acid" : Number(s.SBE_unmeasured_ions) > 2 ? "warn" : "good";
+    const residualTone = Number(s.residual_UI_after_lactate) < -2 ? "acid" : Number(s.residual_UI_after_lactate) > 2 ? "warn" : "good";
+    const abeTone = Number(s.ABE) < -2 ? "acid" : Number(s.ABE) > 2 ? "alkali" : "good";
     return `
       <div class="metric-grid stewart-metrics">
-        ${metric("Delta gap", m.delta_AG !== "" ? m.delta_AG - m.delta_HCO3 : "", m.delta_interpretation)}
-        ${metric("SBE SID", s.SBE_SID, "Strong ion effect")}
-        ${metric("SBE albumin", s.SBE_albumin, "Weak acid effect")}
-        ${metric("SBE UI", s.SBE_unmeasured_ions, "Unmeasured ions")}
-        ${metric("UI after lactate", s.SBE_unmeasured_ions_after_lactate, "Non-lactate residual")}
+        ${metric("Na-Cl", s.Na_minus_Cl, "Measured SID screen")}
+        ${metric("Ref Na-Cl", s.pH_adjusted_reference_Na_minus_Cl, "pH-adjusted")}
+        ${metric("SBE SID", s.SBE_SID, s.SBE_SID_interpretation, toneFor(s.SBE_SID))}
+        ${metric("SBE albumin", s.SBE_albumin, s.SBE_albumin_interpretation, toneFor(s.SBE_albumin))}
+        ${metric("SBE UI", s.SBE_unmeasured_ions, s.SBE_unmeasured_ions_interpretation, uiTone)}
+        ${metric("UI after lactate", s.residual_UI_after_lactate, s.residual_UI_after_lactate_interpretation, residualTone)}
+        ${metric("ABE", s.ABE, s.ABE_interpretation, abeTone)}
       </div>
+    `;
+  }
+
+  function stewartStatus(report) {
+    const s = report.stewart_light;
+    const notes = [];
+    if (s.missing_inputs?.length) notes.push(`Missing Stewart inputs: ${s.missing_inputs.join(", ")}.`);
+    if (s.unit_warnings?.length) notes.push(...s.unit_warnings);
+    const tags = (s.stewart_light_tags || [])
+      .map((tag) => `<span class="tag warn">${escapeHTML(tag)}</span>`)
+      .join("");
+    return `
+      ${notes.length ? `<div class="clinical-warning">${escapeHTML(notes.join(" "))}</div>` : ""}
+      ${tags ? `<div class="chip-row stewart-tags">${tags}</div>` : ""}
     `;
   }
 
@@ -763,8 +782,9 @@
             ${stewartMetricGrid(report)}
           </section>
           <section class="report-block">
-            <h3>Stewart light</h3>
+            <h3>Stewart light analysis</h3>
             ${list(report.stewart_light.interpretation)}
+            ${stewartStatus(report)}
           </section>
         </section>
 

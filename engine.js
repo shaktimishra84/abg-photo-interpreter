@@ -38,6 +38,7 @@
     "potassium",
     "chloride",
     "lactate",
+    "albumin",
     "sampleType"
   ];
 
@@ -431,52 +432,211 @@
 
   function stewartLight(v) {
     const out = {
+      input_units_validated: false,
       eligible: false,
+      Na: NaN,
+      Cl: NaN,
+      pH: NaN,
+      SBE: NaN,
+      albumin_g_per_L: NaN,
+      lactate_mmol_per_L: NaN,
       Na_minus_Cl: NaN,
+      pH_adjusted_reference_Na_minus_Cl: NaN,
       reference_Na_minus_Cl: NaN,
       SBE_SID: NaN,
+      SBE_SID_interpretation: "",
       SBE_albumin: NaN,
+      SBE_albumin_interpretation: "",
       SBE_unmeasured_ions: NaN,
+      SBE_unmeasured_ions_interpretation: "",
+      residual_UI_after_lactate: NaN,
       SBE_unmeasured_ions_after_lactate: NaN,
+      residual_UI_after_lactate_interpretation: "",
+      ABE: NaN,
+      ABE_interpretation: "",
+      stewart_light_tags: [],
+      final_stewart_summary: "",
+      missing_inputs: [],
+      unit_warnings: [],
       interpretation: [],
       blockedReason: ""
     };
 
-    const required = ["sbe", "sodium", "chloride", "albumin", "lactate"];
-    const missing = required.filter((field) => !has(v[field].value));
-    if (missing.length) {
-      out.blockedReason = `Stewart light blocked until ${missing.join(", ")} available and units confirmed.`;
+    const labels = {
+      pH: "pH",
+      sbe: "SBE/BE",
+      sodium: "Na",
+      chloride: "Cl",
+      albumin: "albumin",
+      lactate: "lactate"
+    };
+    const baseFields = ["pH", "sbe", "sodium", "chloride", "albumin"];
+    const allFields = baseFields.concat("lactate");
+    out.missing_inputs = allFields.filter((field) => !has(v[field].value)).map((field) => labels[field]);
+
+    const baseUnitFields = ["pH", "sbe", "sodium", "chloride", "albumin"];
+    const baseUnitProblems = baseUnitFields.filter((field) => has(v[field].value) && !v[field].confirmed);
+    const lactateUnitProblem = has(v.lactate.value) && !v.lactate.confirmed;
+    const unitProblems = baseUnitProblems.concat(lactateUnitProblem ? ["lactate"] : []);
+    if (unitProblems.length) {
+      out.unit_warnings.push(`Stewart light needs explicit units for ${unitProblems.map((field) => labels[field]).join(", ")}.`);
+    }
+
+    const missingBase = baseFields.filter((field) => !has(v[field].value));
+    if (missingBase.length) {
+      out.blockedReason = `Stewart light incomplete: add ${missingBase.map((field) => labels[field]).join(", ")} to partition the metabolic component.`;
+      out.final_stewart_summary = out.blockedReason;
+      out.interpretation = [out.blockedReason];
       return out;
     }
-    if (!v.albumin.confirmed) {
-      out.blockedReason = "Stewart light blocked until albumin unit is explicitly confirmed.";
+    if (baseUnitProblems.length) {
+      out.blockedReason = `Stewart light not calculated because ${baseUnitProblems.map((field) => labels[field]).join(", ")} units are unclear.`;
+      out.final_stewart_summary = out.blockedReason;
+      out.interpretation = [out.blockedReason];
       return out;
     }
 
+    const tags = new Set();
+    const addTag = (tag) => tags.add(tag);
+    const rounded = (value, digits = 2) => round(value, digits);
+
+    out.input_units_validated = !unitProblems.length;
     out.eligible = true;
-    out.Na_minus_Cl = v.sodium.value - v.chloride.value;
-    out.reference_Na_minus_Cl = has(v.pH.value) && (v.pH.value < 7.3 || v.pH.value > 7.5)
-      ? 35 + 15 * (7.4 - v.pH.value)
+    out.Na = v.sodium.value;
+    out.Cl = v.chloride.value;
+    out.pH = v.pH.value;
+    out.SBE = v.sbe.value;
+    out.albumin_g_per_L = v.albumin.value;
+    out.lactate_mmol_per_L = lactateUnitProblem ? NaN : v.lactate.value;
+    out.Na_minus_Cl = out.Na - out.Cl;
+    out.pH_adjusted_reference_Na_minus_Cl = (out.pH < 7.3 || out.pH > 7.5)
+      ? 35 + 15 * (7.4 - out.pH)
       : 35;
-    out.SBE_SID = out.Na_minus_Cl - out.reference_Na_minus_Cl;
-    out.SBE_albumin = 0.3 * (40 - v.albumin.value);
-    out.SBE_unmeasured_ions = v.sbe.value - out.SBE_SID - out.SBE_albumin;
-    out.SBE_unmeasured_ions_after_lactate = out.SBE_unmeasured_ions + v.lactate.value;
+    out.reference_Na_minus_Cl = out.pH_adjusted_reference_Na_minus_Cl;
+    out.SBE_SID = out.Na_minus_Cl - out.pH_adjusted_reference_Na_minus_Cl;
+    out.SBE_albumin = 0.3 * (40 - out.albumin_g_per_L);
+    out.SBE_unmeasured_ions = out.SBE - out.SBE_SID - out.SBE_albumin;
 
-    if (out.SBE_SID < -0.5) out.interpretation.push("Negative SBE_SID: strong ion acidosis, usually hyperchloremic or low-SID acidosis.");
-    else if (out.SBE_SID > 0.5) out.interpretation.push("Positive SBE_SID: strong ion alkalosis, usually hypochloremic or high-SID alkalosis.");
-    else out.interpretation.push("SBE_SID is near neutral.");
+    if (out.SBE_SID < -2) {
+      out.SBE_SID_interpretation = "strong ion acidosis; the Na-Cl relationship is acidifying the patient, usually from relative hyperchloremia or low SID";
+      addTag("strong ion acidosis");
+    } else if (out.SBE_SID > 2) {
+      out.SBE_SID_interpretation = "strong ion alkalosis; the Na-Cl relationship is alkalinising the patient, often from hypochloremia or high SID";
+      addTag("strong ion alkalosis");
+      addTag("hypochloremic alkalosis");
+    } else {
+      out.SBE_SID_interpretation = "no major strong ion effect by the +/-2 mmol/L threshold";
+    }
 
-    if (out.SBE_albumin > 0.5) out.interpretation.push("Positive albumin effect: hypoalbuminemic alkalosis.");
-    else if (out.SBE_albumin < -0.5) out.interpretation.push("Negative albumin effect: hyperalbuminemic acidosis.");
-    else out.interpretation.push("Albumin effect is near neutral.");
+    if (out.SBE_albumin > 2) {
+      out.SBE_albumin_interpretation = "hypoalbuminemic alkalosis; low albumin is alkalinising and may mask metabolic acidosis";
+      addTag("hypoalbuminemic alkalosis");
+    } else if (out.SBE_albumin < -2) {
+      out.SBE_albumin_interpretation = "weak acid acidosis / high albumin effect";
+      addTag("weak acid acidosis");
+    } else {
+      out.SBE_albumin_interpretation = "no major albumin / weak acid effect";
+    }
 
-    if (out.SBE_unmeasured_ions < -0.5) out.interpretation.push("Negative SBE_UI: unmeasured anion acidosis.");
-    else if (out.SBE_unmeasured_ions > 0.5) out.interpretation.push("Positive SBE_UI: possible unmeasured cation effect or measurement issue.");
-    else out.interpretation.push("Unmeasured ion effect is near neutral.");
+    if (out.SBE_unmeasured_ions < -2) {
+      out.SBE_unmeasured_ions_interpretation = "unmeasured anion acidosis";
+      addTag("unmeasured anion acidosis");
+    } else if (out.SBE_unmeasured_ions > 2) {
+      out.SBE_unmeasured_ions_interpretation = "possible unmeasured cation effect, unexplained alkalinising component, or analytical/unit error; check unit and analyzer error before rare causes";
+      addTag("possible unmeasured cation effect");
+      addTag("possible analytical or unit error");
+    } else {
+      out.SBE_unmeasured_ions_interpretation = "no major unmeasured ion effect";
+    }
 
-    if (out.SBE_unmeasured_ions_after_lactate < -0.5) out.interpretation.push("Residual after lactate remains negative: consider ketones, uremic anions, toxins, phosphate/sulfate, pyroglutamate, or other fixed acids.");
-    else out.interpretation.push("Residual after lactate is near neutral or positive.");
+    if (has(out.lactate_mmol_per_L)) {
+      out.residual_UI_after_lactate = out.SBE_unmeasured_ions + out.lactate_mmol_per_L;
+      out.SBE_unmeasured_ions_after_lactate = out.residual_UI_after_lactate;
+      out.ABE = out.SBE + out.lactate_mmol_per_L;
+
+      if (out.residual_UI_after_lactate < -2) {
+        out.residual_UI_after_lactate_interpretation = "additional non-lactate fixed acids are present";
+        addTag("non-lactate fixed-acid acidosis");
+      } else if (out.residual_UI_after_lactate > 2) {
+        out.residual_UI_after_lactate_interpretation = "lactate is present, but another alkalinising process, unmeasured cation, or analytical issue may be present";
+        addTag("possible unmeasured cation effect");
+        addTag("possible analytical or unit error");
+      } else {
+        out.residual_UI_after_lactate_interpretation = "lactate explains most of the unmeasured anion effect";
+        if (out.SBE_unmeasured_ions < -2 && out.lactate_mmol_per_L > 2) addTag("lactate-dominant acidosis");
+      }
+
+      if (out.ABE < -5) {
+        out.ABE_interpretation = "significant non-lactate fixed-acid burden";
+        addTag("non-lactate fixed-acid acidosis");
+      } else if (out.ABE < -2) {
+        out.ABE_interpretation = "non-lactate metabolic acidosis";
+        addTag("non-lactate fixed-acid acidosis");
+      } else if (out.ABE > 2) {
+        out.ABE_interpretation = "non-lactate alkalinising component";
+      } else {
+        out.ABE_interpretation = "near-neutral non-lactate metabolic component";
+      }
+
+      if (out.SBE_SID < -2 && out.lactate_mmol_per_L >= 4) addTag("mixed chloride and lactate acidosis");
+      if (out.SBE_SID > 2 && out.SBE_unmeasured_ions < -2) addTag("hypochloremic alkalosis masking unmeasured anion acidosis");
+      if (out.SBE_albumin > 2 && (out.SBE_unmeasured_ions < -2 || out.ABE < -2)) addTag("hypoalbuminemia masking metabolic acidosis");
+    } else {
+      out.residual_UI_after_lactate_interpretation = has(v.lactate.value)
+        ? "incomplete because lactate units are unclear"
+        : "incomplete because lactate is missing";
+      out.ABE_interpretation = out.residual_UI_after_lactate_interpretation;
+      if (has(v.lactate.value)) {
+        out.blockedReason = "Stewart light lactate-adjusted residual and ABE are incomplete until lactate units are explicit.";
+      } else {
+        out.blockedReason = "Stewart light lactate-adjusted residual and ABE are incomplete until lactate is added.";
+      }
+    }
+
+    const drivers = [];
+    if (out.SBE_SID < -2) drivers.push("strong ion acidosis");
+    if (out.SBE_SID > 2) drivers.push("strong ion alkalosis");
+    if (out.SBE_albumin > 2) drivers.push("hypoalbuminemic alkalosis");
+    if (out.SBE_albumin < -2) drivers.push("weak acid acidosis");
+    if (out.SBE_unmeasured_ions < -2) drivers.push("unmeasured anion acidosis");
+    if (out.SBE_unmeasured_ions > 2) drivers.push("possible unmeasured cation or analytical/unit issue");
+    if (has(out.residual_UI_after_lactate) && out.residual_UI_after_lactate < -2) drivers.push("additional non-lactate fixed-acid burden");
+    if (has(out.ABE) && out.ABE > 2) drivers.push("non-lactate alkalinising component");
+
+    if (drivers.length) {
+      out.final_stewart_summary = `Mixed metabolic pattern with ${drivers.join(", ")}.`;
+    } else {
+      out.final_stewart_summary = "No major Stewart metabolic driver by the +/-2 mmol/L thresholds.";
+    }
+    if (Math.abs(out.SBE) <= 2 && drivers.length) {
+      out.final_stewart_summary += " SBE is near zero, so opposing metabolic processes may be masking each other.";
+    }
+    if (out.SBE_albumin > 2 && (out.SBE_unmeasured_ions < -2 || (has(out.ABE) && out.ABE < -2))) {
+      out.final_stewart_summary += " Hypoalbuminemia may be masking the severity of metabolic acidosis.";
+    }
+    if (out.SBE_unmeasured_ions > 2) {
+      out.final_stewart_summary += " Check units and analyzer/sample error before rare unmeasured cations.";
+    }
+    if (out.blockedReason) out.final_stewart_summary += ` ${out.blockedReason}`;
+
+    out.stewart_light_tags = Array.from(tags);
+    out.interpretation = [
+      `Na-Cl difference is ${rounded(out.Na_minus_Cl)} mmol/L.`,
+      `The pH-adjusted Na-Cl reference is ${rounded(out.pH_adjusted_reference_Na_minus_Cl)} mmol/L.`,
+      `SBE_SID is ${rounded(out.SBE_SID)} mmol/L, indicating ${out.SBE_SID_interpretation}.`,
+      `Albumin is ${rounded(out.albumin_g_per_L)} g/L.`,
+      `SBE_Albumin is ${rounded(out.SBE_albumin)} mmol/L, indicating ${out.SBE_albumin_interpretation}.`,
+      `SBE_UI is ${rounded(out.SBE_unmeasured_ions)} mmol/L, indicating ${out.SBE_unmeasured_ions_interpretation}.`
+    ];
+    if (has(out.lactate_mmol_per_L)) {
+      out.interpretation.push(`Lactate is ${rounded(out.lactate_mmol_per_L)} mmol/L.`);
+      out.interpretation.push(`Residual unmeasured ion effect after lactate is ${rounded(out.residual_UI_after_lactate)} mmol/L, indicating ${out.residual_UI_after_lactate_interpretation}.`);
+      out.interpretation.push(`ABE is ${rounded(out.ABE)} mmol/L, indicating ${out.ABE_interpretation}.`);
+    } else {
+      out.interpretation.push(`Lactate-adjusted residual is ${out.residual_UI_after_lactate_interpretation}.`);
+      out.interpretation.push(`ABE is ${out.ABE_interpretation}.`);
+    }
+    out.interpretation.push(`Overall Stewart light interpretation: ${out.final_stewart_summary}`);
 
     return out;
   }
@@ -556,7 +716,7 @@
       if (has(v.urineChloride.value) && v.urineChloride.value >= 25) add("Chloride-resistant or renal chloride-wasting alkalosis: active diuretics, Bartter/Gitelman, mineralocorticoid excess, severe hypokalemia or magnesium deficiency.");
       addTests(["urine chloride", "potassium", "magnesium", "blood pressure", "renin/aldosterone if indicated", "diuretic history"]);
     }
-    if (stewart.eligible && stewart.SBE_unmeasured_ions_after_lactate < -0.5) {
+    if (stewart.eligible && has(stewart.residual_UI_after_lactate) && stewart.residual_UI_after_lactate < -2) {
       add("Stewart residual non-lactate unmeasured anion effect: evaluate ketones, renal acids, toxins, phosphate/sulfate, and pyroglutamate risk.");
       addTests(["ketones", "phosphate", "toxicology", "pyroglutamate risk review"]);
     }
@@ -592,7 +752,7 @@
     if (metabolic.deltaInterpretation) lines.push(metabolic.deltaInterpretation);
     if (metabolic.lactateDeltaInterpretation) lines.push(metabolic.lactateDeltaInterpretation);
     if (stewart.eligible) {
-      lines.push(`Stewart light: SBE_SID ${round(stewart.SBE_SID)}, SBE_Alb ${round(stewart.SBE_albumin)}, SBE_UI ${round(stewart.SBE_unmeasured_ions)}, residual after lactate ${round(stewart.SBE_unmeasured_ions_after_lactate)}.`);
+      lines.push(`Stewart light: ${stewart.final_stewart_summary}`);
     } else if (stewart.blockedReason) {
       lines.push(stewart.blockedReason);
     }
@@ -602,7 +762,7 @@
     return lines;
   }
 
-  function stepwiseInterpretation(v, primary, metabolic, compensationResult, abe, oxy, causes, settings) {
+  function stepwiseInterpretation(v, primary, metabolic, compensationResult, stewart, abe, oxy, causes, settings) {
     const steps = [];
     const calculations = [];
     const ph = v.pH.value;
@@ -672,7 +832,23 @@
       calculations.push(`Delta gap = (corrected AG - upper limit) - (24 - HCO3) = ${round(metabolic.deltaAG, 2)} - ${round(metabolic.deltaHCO3, 2)} = ${round(metabolic.deltaGap, 2)}; ${metabolic.deltaInterpretation}`);
     }
 
-    if (has(abe.ABE)) {
+    if (stewart.eligible) {
+      steps.push(`Stewart light partitions the metabolic component into strong ion, albumin, unmeasured ion, lactate, and non-lactate fixed-acid effects.`);
+      steps.push(stewart.final_stewart_summary);
+      calculations.push(`Stewart Na-Cl difference = Na - Cl = ${round(v.sodium.value, 2)} - ${round(v.chloride.value, 2)} = ${round(stewart.Na_minus_Cl, 2)} mmol/L.`);
+      calculations.push(`pH-adjusted Na-Cl reference = ${stewart.pH < 7.3 || stewart.pH > 7.5 ? `35 + 15 x (7.40 - pH) = 35 + 15 x (7.40 - ${round(stewart.pH, 3)}) = ` : ""}${round(stewart.pH_adjusted_reference_Na_minus_Cl, 2)} mmol/L.`);
+      calculations.push(`SBE_SID = (Na - Cl) - reference = ${round(stewart.Na_minus_Cl, 2)} - ${round(stewart.pH_adjusted_reference_Na_minus_Cl, 2)} = ${round(stewart.SBE_SID, 2)} mmol/L.`);
+      calculations.push(`SBE_Albumin = 0.3 x (40 - albumin g/L) = 0.3 x (40 - ${round(stewart.albumin_g_per_L, 2)}) = ${round(stewart.SBE_albumin, 2)} mmol/L.`);
+      calculations.push(`SBE_UI = SBE - SBE_SID - SBE_Albumin = ${round(stewart.SBE, 2)} - (${round(stewart.SBE_SID, 2)}) - (${round(stewart.SBE_albumin, 2)}) = ${round(stewart.SBE_unmeasured_ions, 2)} mmol/L.`);
+      if (has(stewart.residual_UI_after_lactate)) {
+        calculations.push(`Residual UI after lactate = SBE_UI + lactate = ${round(stewart.SBE_unmeasured_ions, 2)} + ${round(stewart.lactate_mmol_per_L, 2)} = ${round(stewart.residual_UI_after_lactate, 2)} mmol/L.`);
+        calculations.push(`ABE = SBE + lactate = ${round(stewart.SBE, 2)} + ${round(stewart.lactate_mmol_per_L, 2)} = ${round(stewart.ABE, 2)} mmol/L.`);
+      } else if (stewart.blockedReason) {
+        calculations.push(stewart.blockedReason);
+      }
+    }
+
+    if (has(abe.ABE) && !stewart.eligible) {
       calculations.push(`Alactic base excess = SBE + lactate = ${round(sbe, 2)} + ${round(lactate, 2)} = ${round(abe.ABE, 2)} mmol/L.`);
     }
 
@@ -702,7 +878,7 @@
     const oxy = oxygenation(v, settings);
     const causes = likelyCauses(v, primary, metabolic, stewart, abe, raw.flags || {});
     const finalDiagnosis = lineItems(v, primary, metabolic, compensationResult, stewart, abe, oxy);
-    const stepwise = stepwiseInterpretation(v, primary, metabolic, compensationResult, abe, oxy, causes, settings);
+    const stepwise = stepwiseInterpretation(v, primary, metabolic, compensationResult, stewart, abe, oxy, causes, settings);
 
     const blockedCalculations = [];
     if (!has(metabolic.osmolalGap) && has(v.measuredOsmolality.value)) {
@@ -755,12 +931,32 @@
         albumin_correction_blocked: metabolic.albuminCorrectionBlocked
       },
       stewart_light: {
+        input_units_validated: stewart.input_units_validated,
+        eligible: stewart.eligible,
+        Na: has(stewart.Na) ? round(stewart.Na, 2) : "",
+        Cl: has(stewart.Cl) ? round(stewart.Cl, 2) : "",
+        pH: has(stewart.pH) ? round(stewart.pH, 3) : "",
+        SBE: has(stewart.SBE) ? round(stewart.SBE, 2) : "",
+        albumin_g_per_L: has(stewart.albumin_g_per_L) ? round(stewart.albumin_g_per_L, 2) : "",
+        lactate_mmol_per_L: has(stewart.lactate_mmol_per_L) ? round(stewart.lactate_mmol_per_L, 2) : "",
         Na_minus_Cl: has(stewart.Na_minus_Cl) ? round(stewart.Na_minus_Cl, 2) : "",
+        pH_adjusted_reference_Na_minus_Cl: has(stewart.pH_adjusted_reference_Na_minus_Cl) ? round(stewart.pH_adjusted_reference_Na_minus_Cl, 2) : "",
         reference_Na_minus_Cl: has(stewart.reference_Na_minus_Cl) ? round(stewart.reference_Na_minus_Cl, 2) : "",
         SBE_SID: has(stewart.SBE_SID) ? round(stewart.SBE_SID, 2) : "",
+        SBE_SID_interpretation: stewart.SBE_SID_interpretation,
         SBE_albumin: has(stewart.SBE_albumin) ? round(stewart.SBE_albumin, 2) : "",
+        SBE_albumin_interpretation: stewart.SBE_albumin_interpretation,
         SBE_unmeasured_ions: has(stewart.SBE_unmeasured_ions) ? round(stewart.SBE_unmeasured_ions, 2) : "",
+        SBE_unmeasured_ions_interpretation: stewart.SBE_unmeasured_ions_interpretation,
+        residual_UI_after_lactate: has(stewart.residual_UI_after_lactate) ? round(stewart.residual_UI_after_lactate, 2) : "",
         SBE_unmeasured_ions_after_lactate: has(stewart.SBE_unmeasured_ions_after_lactate) ? round(stewart.SBE_unmeasured_ions_after_lactate, 2) : "",
+        residual_UI_after_lactate_interpretation: stewart.residual_UI_after_lactate_interpretation,
+        ABE: has(stewart.ABE) ? round(stewart.ABE, 2) : "",
+        ABE_interpretation: stewart.ABE_interpretation,
+        stewart_light_tags: stewart.stewart_light_tags,
+        final_stewart_summary: stewart.final_stewart_summary,
+        missing_inputs: stewart.missing_inputs,
+        unit_warnings: stewart.unit_warnings,
         interpretation: stewart.interpretation
       },
       alactic_base_excess: {

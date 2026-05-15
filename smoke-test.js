@@ -29,7 +29,9 @@ const report = global.ABGEngine.analyze(mixedCase, settings);
 assert.strictEqual(report.severity.pH_status, "Acidemia");
 assert.strictEqual(report.metabolic_analysis.corrected_anion_gap, 20);
 assert.strictEqual(report.alactic_base_excess.ABE, -9);
-assert.strictEqual(report.stewart_light.SBE_unmeasured_ions_after_lactate, -2.6);
+assert.strictEqual(report.stewart_light.residual_UI_after_lactate, -2.6);
+assert.strictEqual(report.stewart_light.ABE, -9);
+assert(report.stewart_light.stewart_light_tags.includes("strong ion acidosis"));
 assert(report.final_diagnosis.some((line) => line.includes("additional respiratory acidosis")));
 
 const guessedAlbumin = global.ABGEngine.analyze({
@@ -38,7 +40,7 @@ const guessedAlbumin = global.ABGEngine.analyze({
 }, settings);
 assert.strictEqual(guessedAlbumin.metabolic_analysis.corrected_anion_gap, "");
 assert(guessedAlbumin.unit_normalization.blocked_calculations.some((line) => line.includes("Corrected anion gap blocked")));
-assert(guessedAlbumin.unit_normalization.blocked_calculations.some((line) => line.includes("Stewart light blocked")));
+assert(guessedAlbumin.unit_normalization.blocked_calculations.some((line) => line.includes("Stewart light not calculated")));
 
 const venousCase = global.ABGEngine.analyze({
   ...mixedCase,
