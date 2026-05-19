@@ -489,15 +489,12 @@
     const treatment = report.treatment_suggestions || {};
     return `
       <section class="report-block action-lead">
-        <h3>${escapeHTML(treatment.title || "Initial corrective measures")}</h3>
-        <p>${escapeHTML(treatment.core_rule || "")}</p>
+        <h3>${escapeHTML(treatment.title || "Next steps")}</h3>
         <p>${escapeHTML(treatment.purpose || "")}</p>
       </section>
-      ${treatmentSection("Immediate safety actions", treatment.immediate_safety_actions, "danger-line")}
-      ${treatmentSection("Suggested corrective measures", treatment.corrective_measures, "warn-line")}
-      ${treatmentSection("Repeat or confirm", treatment.repeat_confirm)}
-      ${treatmentSection("Escalate now if", treatment.escalation_triggers, "danger-line")}
-      ${treatmentSection("Very short bedside version", treatment.bedside_summary)}
+      ${treatmentSection("Safety & immediate actions", treatment.immediate_safety_actions, "danger-line")}
+      ${treatmentSection("Corrective measures", treatment.corrective_measures, "warn-line")}
+      ${treatmentSection("Escalate if", treatment.escalation_triggers, "danger-line")}
     `;
   }
 
