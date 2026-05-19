@@ -4,7 +4,6 @@
   const $ = (selector) => document.querySelector(selector);
   const engine = window.ABGEngine;
   let latestReport = null;
-  let selectedPhoto = null;
   let completionLabel = "";
 
   const coreFieldIds = ["pH", "paCO2", "paO2", "fio2", "hco3", "sbe", "sodium", "potassium", "chloride", "albumin", "lactate", "sampleType"];
@@ -81,24 +80,6 @@
     age: { min: "0", max: "120", title: "Age helps screen the A-a gradient" }
   };
 
-  const parsePatterns = [
-    { id: "pH", label: "pH", units: "unitless", patterns: [/(?:^|[^A-Z0-9])PH[^0-9+\-.]{0,12}([+\-]?\d+(?:[.,]\d+)?)/i] },
-    { id: "paCO2", label: "PaCO2", units: "mmHg", patterns: [/(?:^|[^A-Z0-9])(?:PA?CO2|PA?C02|PCO2|PC02|PACO2|PCO2)[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
-    { id: "paO2", label: "PaO2", units: "mmHg", patterns: [/(?:^|[^A-Z0-9])(?:PA?O2|PA?02|PO2|P02|PAO2|PO2)[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
-    { id: "hco3", label: "HCO3", units: "mmol/L", patterns: [/(?:^|[^A-Z0-9])CHCO3\s*-\s*\(\s*P\s*\)\s*C?[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i, /(?:^|[^A-Z0-9])(?:HCO3|BICARB(?:ONATE)?|CHCO3)[^0-9+\-.]{0,24}([+\-]?\d+(?:[.,]\d+)?)/i] },
-    { id: "sbe", label: "SBE / BE", units: "mmol/L", patterns: [/(?:^|[^A-Z0-9])C?BASE(?:\s*\([^)]*\))?C?[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i, /(?:^|[^A-Z0-9])(?:SBE|ABE|BASE\s*EXCESS|BASE\s*EXC|B\.?E\.?|BE)[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
-    { id: "sodium", label: "Sodium", units: "mmol/L", patterns: [/(?:^|[^A-Z0-9])C?\s*NA\+?[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i, /(?:^|[^A-Z0-9])SODIUM[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
-    { id: "potassium", label: "Potassium", units: "mmol/L", patterns: [/(?:^|[^A-Z0-9])C?\s*K\+?[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i, /(?:^|[^A-Z0-9])POTASSIUM[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
-    { id: "chloride", label: "Chloride", units: "mmol/L", patterns: [/(?:^|[^A-Z0-9])C?\s*CL-?[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i, /(?:^|[^A-Z0-9])CHLORIDE[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
-    { id: "lactate", label: "Lactate", units: "mmol/L", patterns: [/(?:^|[^A-Z0-9])C?\s*LAC(?:TATE|T)?[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
-    { id: "albumin", label: "Albumin", units: "g/L", patterns: [/(?:^|[^A-Z0-9])(?:ALBUMIN|ALB)[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
-    { id: "fio2", label: "FiO2", units: "percent", patterns: [/(?:^|[^A-Z0-9])(?:FIO2|FI02|FO2\s*\(?I\)?|INSPIRED\s*O2)[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
-    { id: "glucose", label: "Glucose", units: "mg/dL", patterns: [/(?:^|[^A-Z0-9])C?\s*GLU(?:COSE)?[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
-    { id: "measuredOsmolality", label: "Measured osmolality", units: "mOsm/kg", patterns: [/(?:^|[^A-Z0-9])M?OSM(?:C|OLALITY)?[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
-    { id: "calcium", label: "Calcium", units: "mmol/L", patterns: [/(?:^|[^A-Z0-9])C?\s*CA\+{0,2}[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
-    { id: "urea", label: "Urea / BUN", units: "BUN_mg_dL", patterns: [/(?:^|[^A-Z0-9])(?:BUN|UREA)[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] },
-    { id: "creatinine", label: "Creatinine", units: "mg/dL", patterns: [/(?:^|[^A-Z0-9])(?:CREATININE|CREAT|CR)[^0-9+\-.]{0,18}([+\-]?\d+(?:[.,]\d+)?)/i] }
-  ];
 
   const example = {
     pH: ["7.003", "unitless"],
@@ -371,13 +352,6 @@
   function resetForm(options = {}) {
     if (options.confirm && !window.confirm("Clear all entered values and the current interpretation?")) return;
     $("#abgForm").reset();
-    selectedPhoto = null;
-    if ($("#uploadImageInput")) $("#uploadImageInput").value = "";
-    if ($("#cameraImageInput")) $("#cameraImageInput").value = "";
-    $("#photoPreview").innerHTML = "<span>No image selected</span>";
-    $("#ocrText").value = "";
-    $("#ocrStatus").textContent = "No photo";
-    $("#parsedSummary").innerHTML = "";
     $("#agUpperLimit").value = "12";
     $("#barometricPressure").value = "760";
     $("#respiratoryQuotient").value = "0.8";
@@ -395,188 +369,6 @@
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
-  }
-
-  function detectUnit(line, field, fallback) {
-    const text = line.toUpperCase();
-    if (field === "paCO2" || field === "paO2") {
-      if (text.includes("KPA")) return "kPa";
-      if (text.includes("MMHG") || text.includes("MM HG")) return "mmHg";
-      return fallback;
-    }
-    if (field === "fio2") {
-      if (text.includes("%")) return "percent";
-      return fallback;
-    }
-    if (field === "albumin") {
-      if (text.includes("G/DL") || text.includes("G / DL")) return "g/dL";
-      if (text.includes("G/L") || text.includes("G / L")) return "g/L";
-      return fallback;
-    }
-    if (field === "lactate" || field === "glucose" || field === "betaHydroxybutyrate") {
-      if (text.includes("MG/DL") || text.includes("MG / DL")) return "mg/dL";
-      if (text.includes("MMOL")) return "mmol/L";
-      return fallback;
-    }
-    if (field === "urea") {
-      if (text.includes("BUN") && text.includes("MG")) return "BUN_mg_dL";
-      if (text.includes("UREA") && text.includes("MG")) return "urea_mg_dL";
-      if (text.includes("MMOL")) return "urea_mmol_L";
-      return fallback;
-    }
-    if (field === "creatinine") {
-      if (text.includes("UMOL") || text.includes("µMOL") || text.includes("MICROMOL")) return "micromol/L";
-      if (text.includes("MG/DL") || text.includes("MG / DL")) return "mg/dL";
-      return fallback;
-    }
-    return fallback;
-  }
-
-  function parseOcrText(text) {
-    const normalized = text
-      .replace(/[−–—]/g, "-")
-      .replace(/[₂]/g, "2")
-      .replace(/[₃]/g, "3")
-      .replace(/[|]/g, " ")
-      .split(/\n+/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-
-    const searchText = normalized.join("\n");
-    const found = [];
-    parsePatterns.forEach((field) => {
-      let match = null;
-      let matchedLine = "";
-      for (const pattern of field.patterns) {
-        for (const line of normalized) {
-          match = line.match(pattern);
-          if (match) {
-            matchedLine = line;
-            break;
-          }
-        }
-        if (match) break;
-      }
-      if (!match) {
-        for (const pattern of field.patterns) {
-          match = searchText.match(pattern);
-          if (match) {
-            matchedLine = match[0];
-            break;
-          }
-        }
-      }
-      if (!match) return;
-      const value = match[1].replace(",", ".");
-      if (!Number.isFinite(Number(value))) return;
-      found.push({
-        id: field.id,
-        label: field.label,
-        value,
-        unit: detectUnit(matchedLine, field.id, field.units),
-        source: matchedLine
-      });
-    });
-    return found;
-  }
-
-  function applyParsedValues(values) {
-    values.forEach((item) => {
-      const input = $(`#${item.id}`);
-      const unit = $(`#${item.id}Unit`);
-      if (input) input.value = item.value;
-      if (unit && [...unit.options].some((option) => option.value === item.unit)) {
-        unit.value = item.unit;
-      }
-    });
-    updateCompletion();
-  }
-
-  function renderParsedSummary(values) {
-    const root = $("#parsedSummary");
-    if (!values.length) {
-      root.innerHTML = "<div class=\"clinical-warning\">No ABG values were confidently extracted. Try cropping the image around the result table or paste OCR text manually.</div>";
-      return;
-    }
-    root.innerHTML = `
-      <div class="parsed-chip-row">
-        ${values.map((item) => `
-          <div class="parsed-row">
-            <span>${escapeHTML(item.label)}</span>
-            <strong>${escapeHTML(item.value)} ${escapeHTML(optionLabel(item.unit))}</strong>
-          </div>
-        `).join("")}
-      </div>
-      <button class="dismiss-button" id="dismissParsedSummary" type="button" aria-label="Clear extracted value summary">Clear extracted summary</button>
-      <div class="clinical-warning">Review every extracted value and unit before using the interpretation. Photo OCR can misread decimals, minus signs, and units.</div>
-    `;
-    $("#dismissParsedSummary").addEventListener("click", () => {
-      root.innerHTML = "";
-    });
-  }
-
-  function useOcrText() {
-    const values = parseOcrText($("#ocrText").value);
-    applyParsedValues(values);
-    renderParsedSummary(values);
-    $("#ocrStatus").textContent = values.length ? `${values.length} values found` : "Review needed";
-  }
-
-  async function readPhoto() {
-    if (!selectedPhoto) {
-      $("#ocrStatus").textContent = "Choose photo";
-      return;
-    }
-    if (!window.Tesseract) {
-      $("#ocrStatus").textContent = "OCR unavailable";
-      $("#parsedSummary").innerHTML = "<div class=\"clinical-warning\">OCR library could not load. If this is opened offline, deploy or connect to the internet, or paste text manually.</div>";
-      return;
-    }
-    $("#ocrStatus").textContent = "Reading...";
-    $("#readPhoto").disabled = true;
-    try {
-      const result = await window.Tesseract.recognize(selectedPhoto, "eng", {
-        logger(message) {
-          if (message.status === "recognizing text" && Number.isFinite(message.progress)) {
-            $("#ocrStatus").textContent = `${Math.round(message.progress * 100)}%`;
-          }
-        }
-      });
-      $("#ocrText").value = result.data.text.trim();
-      useOcrText();
-    } catch (error) {
-      $("#ocrStatus").textContent = "OCR failed";
-      $("#parsedSummary").innerHTML = `<div class="clinical-warning">Could not read this photo: ${escapeHTML(error.message || error)}</div>`;
-    } finally {
-      $("#readPhoto").disabled = false;
-    }
-  }
-
-  function onPhotoSelected(event) {
-    const file = event.target.files && event.target.files[0];
-    selectedPhoto = file || null;
-    if (event.target.id === "uploadImageInput") $("#cameraImageInput").value = "";
-    if (event.target.id === "cameraImageInput") $("#uploadImageInput").value = "";
-    $("#ocrText").value = "";
-    $("#parsedSummary").innerHTML = "";
-    if (!file) {
-      $("#photoPreview").innerHTML = "<span>No image selected</span>";
-      $("#ocrStatus").textContent = "No photo";
-      return;
-    }
-    const url = URL.createObjectURL(file);
-    $("#photoPreview").innerHTML = `<img alt="Selected ABG photo" src="${url}">`;
-    $("#ocrStatus").textContent = "Photo ready";
-  }
-
-  function clearPhotoOnly() {
-    selectedPhoto = null;
-    $("#uploadImageInput").value = "";
-    $("#cameraImageInput").value = "";
-    $("#photoPreview").innerHTML = "<span>No image selected</span>";
-    $("#ocrText").value = "";
-    $("#ocrStatus").textContent = "No photo";
-    $("#parsedSummary").innerHTML = "";
   }
 
   function activateInputTab(tab) {
@@ -671,23 +463,14 @@
     const treatment = report.treatment_suggestions || {};
     const safety = treatment.immediate_safety_actions || [];
     const corrective = treatment.corrective_measures || [];
-    const headlineActions = safety.length ? safety.slice(0, 3) : (treatment.bedside_summary || []).slice(0, 3);
-    const nextMeasures = corrective.slice(0, 4);
+    const steps = safety.length ? safety.slice(0, 4) : corrective.slice(0, 4);
     return `
       <section class="action-card">
-        <div class="action-kicker">Corrective measures</div>
-        <h3>${escapeHTML(treatment.title || "Initial corrective measures")}</h3>
-        <p class="action-rule">${escapeHTML(treatment.core_rule || "")}</p>
-        <div class="action-card-grid">
-          <div>
-            <h4>Do now</h4>
-            ${list(headlineActions, "danger-line")}
-          </div>
-          <div>
-            <h4>Correct next</h4>
-            ${list(nextMeasures, "warn-line")}
-          </div>
-        </div>
+        <div class="action-kicker">Steps</div>
+        <h3>${escapeHTML(treatment.title || "Initial actions")}</h3>
+        <ol class="step-list">
+          ${steps.map((step, i) => `<li><strong>${i + 1}.</strong> ${escapeHTML(step)}</li>`).join("")}
+        </ol>
         <p class="action-disclaimer">${escapeHTML(treatment.purpose || "")}</p>
       </section>
     `;
@@ -855,11 +638,19 @@
     `;
   }
 
+  function calculationsPanel(report) {
+    const steps = report.stepwise_interpretation || { calculations: [] };
+    return `
+      <section class="report-block">
+        <h3>Calculations</h3>
+        ${orderedList(steps.calculations, "calc-line")}
+      </section>
+    `;
+  }
+
   function renderReport(report) {
     const headline = report.primary_interpretation.primary_disorders[0] || report.severity.pH_status;
-    const danger = report.severity.danger_flags.concat(report.validation_warnings || []);
-    const unitNotes = report.unit_normalization.unit_warnings.concat(report.unit_normalization.blocked_calculations);
-    const steps = report.stepwise_interpretation || {
+    const stepwise = report.stepwise_interpretation || {
       interpretation_steps: report.final_diagnosis,
       calculations: [],
       possible_reasons: report.likely_causes
@@ -867,7 +658,7 @@
     $("#report").className = "";
     $("#report").innerHTML = `
       <section class="diagnosis-card">
-        <div class="diagnosis-title">Primary read</div>
+        <div class="diagnosis-title">Diagnosis</div>
         <div class="lead-diagnosis">${escapeHTML(headline)}</div>
         ${chips(report)}
       </section>
@@ -880,10 +671,8 @@
 
       <div class="tab-strip report-tabs" role="tablist" aria-label="Report sections">
         <button class="tab-button active" type="button" role="tab" aria-selected="true" data-report-tab="actions">Actions</button>
-        <button class="tab-button" type="button" role="tab" aria-selected="false" data-report-tab="summary">Step read</button>
+        <button class="tab-button" type="button" role="tab" aria-selected="false" data-report-tab="calculations">Calculations</button>
         <button class="tab-button" type="button" role="tab" aria-selected="false" data-report-tab="stewart">Stewart</button>
-        <button class="tab-button" type="button" role="tab" aria-selected="false" data-report-tab="values">Values</button>
-        <button class="tab-button" type="button" role="tab" aria-selected="false" data-report-tab="json">JSON</button>
       </div>
 
       <div class="report-tab-panels">
@@ -891,31 +680,8 @@
           ${treatmentPanel(report)}
         </section>
 
-        <section class="report-tab-panel" data-report-panel="summary" hidden>
-          <section class="report-block">
-            <h3>Step-by-step read</h3>
-            ${orderedList(steps.interpretation_steps)}
-          </section>
-          <section class="report-block">
-            <h3>Calculations used</h3>
-            ${orderedList(steps.calculations, "calc-line")}
-          </section>
-          <section class="report-block">
-            <h3>Checks and missing tests</h3>
-            <div class="two-col">
-              <div>
-                ${list(danger, "danger-line")}
-                ${unitNotes.length ? `<div class="clinical-warning">${escapeHTML(unitNotes.join(" "))}</div>` : ""}
-              </div>
-              <div>
-                ${list(report.recommended_missing_tests)}
-              </div>
-            </div>
-          </section>
-          <section class="report-block">
-            <h3>Possible reasons</h3>
-            ${list(steps.possible_reasons)}
-          </section>
+        <section class="report-tab-panel" data-report-panel="calculations" hidden>
+          ${calculationsPanel(report)}
         </section>
 
         <section class="report-tab-panel" data-report-panel="stewart" hidden>
@@ -923,20 +689,6 @@
             <h3>Stewart light analysis</h3>
             ${stewartWorkedSteps(report)}
             ${stewartStatus(report)}
-          </section>
-        </section>
-
-        <section class="report-tab-panel" data-report-panel="values" hidden>
-          <section class="report-block">
-            <h3>Converted values</h3>
-            ${convertedRows(report)}
-          </section>
-        </section>
-
-        <section class="report-tab-panel" data-report-panel="json" hidden>
-          <section class="report-block">
-            <h3>Structured output</h3>
-            <pre class="json-box">${escapeHTML(JSON.stringify(report, null, 2))}</pre>
           </section>
         </section>
       </div>
@@ -984,11 +736,6 @@
     $("#loadExample").addEventListener("click", setExample);
     $("#resetForm").addEventListener("click", () => resetForm({ confirm: true }));
     $("#copyJson").addEventListener("click", copyJson);
-    $("#uploadImageInput").addEventListener("change", onPhotoSelected);
-    $("#cameraImageInput").addEventListener("change", onPhotoSelected);
-    $("#readPhoto").addEventListener("click", readPhoto);
-    $("#parseText").addEventListener("click", useOcrText);
-    $("#clearPhoto").addEventListener("click", clearPhotoOnly);
     $("#abgForm").addEventListener("input", updateCompletion);
     $("#abgForm").addEventListener("change", updateCompletion);
     $("#abgForm").addEventListener("keydown", (event) => {

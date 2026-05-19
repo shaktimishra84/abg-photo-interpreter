@@ -31,39 +31,6 @@
           </div>
 
           <form id="abgForm" autocomplete="off">
-            <section class="photo-section" aria-label="Photo input">
-              <div class="section-title">
-                <h3>Photo Input</h3>
-                <span class="status-pill" id="ocrStatus">No photo</span>
-              </div>
-              <div class="photo-grid">
-                <div class="photo-inputs">
-                  <label class="photo-drop">
-                    <input id="uploadImageInput" type="file" accept="image/*">
-                    <span>Upload image</span>
-                    <small>Use gallery, Files, or a laptop image.</small>
-                  </label>
-                  <label class="photo-drop">
-                    <input id="cameraImageInput" type="file" accept="image/*" capture="environment">
-                    <span>Take photo</span>
-                    <small>Use phone camera when available.</small>
-                  </label>
-                </div>
-                <div class="photo-preview" id="photoPreview">
-                  <span>No image selected</span>
-                </div>
-              </div>
-              <div class="photo-actions">
-                <button class="ghost-button" id="readPhoto" type="button">Read Photo</button>
-                <button class="ghost-button" id="parseText" type="button">Use Text</button>
-                <button class="ghost-button" id="clearPhoto" type="button">Clear Photo</button>
-              </div>
-              <details class="ocr-details">
-                <summary>OCR text</summary>
-                <textarea id="ocrText" rows="5" placeholder="OCR text appears here. You can edit it, then press Use Text."></textarea>
-              </details>
-              <div id="parsedSummary" class="parsed-summary"></div>
-            </section>
             <div class="tab-strip input-tabs" id="inputTabs" role="tablist" aria-label="Input groups">
               <button class="tab-button active" type="button" role="tab" aria-selected="true" data-input-tab="core">Core</button>
               <button class="tab-button" type="button" role="tab" aria-selected="false" data-input-tab="more">More values</button>
@@ -103,7 +70,6 @@
       </label>
     </template>
 
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="engine.js"></script>
     <script src="app.js"></script>
   </body>
