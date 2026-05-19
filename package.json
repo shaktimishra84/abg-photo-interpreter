@@ -1,5 +1,5 @@
 {
-  "name": "abg-photo-interpreter",
+  "name": "abg-clinical-interpreter",
   "version": "1.0.0",
   "private": true,
   "description": "Static rule-based ABG interpreter with photo OCR-assisted input.",

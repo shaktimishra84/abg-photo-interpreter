@@ -33,6 +33,9 @@ assert.strictEqual(report.stewart_light.residual_UI_after_lactate, -2.6);
 assert.strictEqual(report.stewart_light.ABE, -9);
 assert(report.stewart_light.stewart_light_tags.includes("strong ion acidosis"));
 assert(report.final_diagnosis.some((line) => line.includes("additional respiratory acidosis")));
+assert(report.treatment_suggestions.immediate_safety_actions.some((line) => line.includes("shock/sepsis")));
+assert(report.treatment_suggestions.corrective_measures.some((line) => line.includes("High-anion-gap acidosis")));
+assert(report.treatment_suggestions.escalation_triggers.some((line) => line.includes("Lactate")));
 
 const guessedAlbumin = global.ABGEngine.analyze({
   ...mixedCase,

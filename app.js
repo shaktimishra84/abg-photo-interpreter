@@ -667,6 +667,57 @@
     `;
   }
 
+  function treatmentCard(report) {
+    const treatment = report.treatment_suggestions || {};
+    const safety = treatment.immediate_safety_actions || [];
+    const corrective = treatment.corrective_measures || [];
+    const headlineActions = safety.length ? safety.slice(0, 3) : (treatment.bedside_summary || []).slice(0, 3);
+    const nextMeasures = corrective.slice(0, 4);
+    return `
+      <section class="action-card">
+        <div class="action-kicker">Corrective measures</div>
+        <h3>${escapeHTML(treatment.title || "Initial corrective measures")}</h3>
+        <p class="action-rule">${escapeHTML(treatment.core_rule || "")}</p>
+        <div class="action-card-grid">
+          <div>
+            <h4>Do now</h4>
+            ${list(headlineActions, "danger-line")}
+          </div>
+          <div>
+            <h4>Correct next</h4>
+            ${list(nextMeasures, "warn-line")}
+          </div>
+        </div>
+        <p class="action-disclaimer">${escapeHTML(treatment.purpose || "")}</p>
+      </section>
+    `;
+  }
+
+  function treatmentSection(title, items, className) {
+    return `
+      <section class="report-block action-section">
+        <h3>${escapeHTML(title)}</h3>
+        ${list(items, className)}
+      </section>
+    `;
+  }
+
+  function treatmentPanel(report) {
+    const treatment = report.treatment_suggestions || {};
+    return `
+      <section class="report-block action-lead">
+        <h3>${escapeHTML(treatment.title || "Initial corrective measures")}</h3>
+        <p>${escapeHTML(treatment.core_rule || "")}</p>
+        <p>${escapeHTML(treatment.purpose || "")}</p>
+      </section>
+      ${treatmentSection("Immediate safety actions", treatment.immediate_safety_actions, "danger-line")}
+      ${treatmentSection("Suggested corrective measures", treatment.corrective_measures, "warn-line")}
+      ${treatmentSection("Repeat or confirm", treatment.repeat_confirm)}
+      ${treatmentSection("Escalate now if", treatment.escalation_triggers, "danger-line")}
+      ${treatmentSection("Very short bedside version", treatment.bedside_summary)}
+    `;
+  }
+
   function stewartWorkedSteps(report) {
     const s = report.stewart_light;
     const hasValue = (value) => value !== "" && value !== null && value !== undefined;
@@ -821,19 +872,26 @@
         ${chips(report)}
       </section>
 
+      ${treatmentCard(report)}
+
       <section class="report-block">
         ${metricGrid(report)}
       </section>
 
       <div class="tab-strip report-tabs" role="tablist" aria-label="Report sections">
-        <button class="tab-button active" type="button" role="tab" aria-selected="true" data-report-tab="summary">Step read</button>
+        <button class="tab-button active" type="button" role="tab" aria-selected="true" data-report-tab="actions">Actions</button>
+        <button class="tab-button" type="button" role="tab" aria-selected="false" data-report-tab="summary">Step read</button>
         <button class="tab-button" type="button" role="tab" aria-selected="false" data-report-tab="stewart">Stewart</button>
         <button class="tab-button" type="button" role="tab" aria-selected="false" data-report-tab="values">Values</button>
         <button class="tab-button" type="button" role="tab" aria-selected="false" data-report-tab="json">JSON</button>
       </div>
 
       <div class="report-tab-panels">
-        <section class="report-tab-panel" data-report-panel="summary">
+        <section class="report-tab-panel" data-report-panel="actions">
+          ${treatmentPanel(report)}
+        </section>
+
+        <section class="report-tab-panel" data-report-panel="summary" hidden>
           <section class="report-block">
             <h3>Step-by-step read</h3>
             ${orderedList(steps.interpretation_steps)}

@@ -738,6 +738,170 @@
     return { causes, recommendedMissingTests: Array.from(tests) };
   }
 
+  function treatmentSuggestions(v, primary, metabolic, compensationResult, oxy, flags, validation) {
+    const repeatConfirm = [];
+    const safetyActions = [];
+    const correctiveMeasures = [];
+    const escalationTriggers = [];
+    const bedsideSummary = [];
+    const t = primary.tendencies || {};
+    const hasFlag = (key) => Boolean(flags && flags[key]);
+    const add = (items, item) => {
+      if (item && !items.includes(item)) items.push(item);
+    };
+    const addMany = (items, values) => values.forEach((value) => add(items, value));
+    const mixedDisorder = (primary.disorders || []).some((line) => line.toLowerCase().includes("mixed")) ||
+      (compensationResult.lines || []).some((line) => line.toLowerCase().includes("additional"));
+    const metabolicAcidosis = t.metabolicAcidosis || (has(v.sbe.value) && v.sbe.value < -2);
+    const metabolicAlkalosis = t.metabolicAlkalosis || (has(v.sbe.value) && v.sbe.value > 2);
+    const respiratoryAcidosis = t.respiratoryAcidosis ||
+      (compensationResult.lines || []).some((line) => line.toLowerCase().includes("additional respiratory acidosis"));
+    const respiratoryAlkalosis = t.respiratoryAlkalosis ||
+      (compensationResult.lines || []).some((line) => line.toLowerCase().includes("additional respiratory alkalosis"));
+    const highAG = metabolic.anionGapCategory === "high anion gap";
+    const normalAGAcidosis = metabolicAcidosis && (metabolic.anionGapCategory === "normal anion gap" || metabolic.anionGapCategory === "low anion gap");
+    const lowUrineChloride = has(v.urineChloride.value) && v.urineChloride.value < 20;
+    const highUrineChloride = has(v.urineChloride.value) && v.urineChloride.value >= 25;
+    const chlorideResponsive = metabolicAlkalosis && (lowUrineChloride || hasFlag("vomiting") || hasFlag("diuretics"));
+    const chlorideResistant = metabolicAlkalosis && (highUrineChloride || hasFlag("hypertension"));
+    const potassium = v.potassium.value;
+
+    addMany(repeatConfirm, [
+      "Repeat ABG/VBG if the result does not match the clinical picture.",
+      "Confirm serum sodium, potassium, chloride, bicarbonate, urea/creatinine, lactate, glucose, and albumin.",
+      "Check glucose and ketones when acidosis is present.",
+      "Get an ECG if potassium abnormality is present or suspected."
+    ]);
+    if (metabolicAlkalosis) add(repeatConfirm, "Check urine chloride to separate chloride-responsive from saline-unresponsive alkalosis.");
+    if (normalAGAcidosis) add(repeatConfirm, "Check urine anion gap or urine osmolal gap if normal-anion-gap acidosis is present.");
+
+    if (has(v.pH.value) && (v.pH.value < 7.1 || v.pH.value > 7.6)) {
+      add(safetyActions, "Critical pH range: escalate early while treating the immediate threat.");
+    }
+    if (respiratoryAcidosis || (has(v.pH.value) && v.pH.value < 7.2 && has(v.paCO2.value) && v.paCO2.value > 45)) {
+      add(safetyActions, "Assess airway and breathing immediately; support oxygenation and ventilation if there is exhaustion, low GCS, severe hypoxemia, or rising PaCO2.");
+    }
+    if (has(v.paO2.value) && v.paO2.value < 60) {
+      add(safetyActions, "Treat hypoxemia first with oxygen and ventilatory support as clinically indicated.");
+    }
+    if (has(oxy.A_a_gradient) && oxy.A_a_gradient > 20) {
+      add(safetyActions, "Elevated A-a gradient: look for V/Q mismatch, pneumonia, edema, ARDS, pulmonary embolism, or shunt physiology.");
+    }
+    if (hasFlag("shock") || hasFlag("sepsis") || (has(v.lactate.value) && v.lactate.value >= 4)) {
+      add(safetyActions, "Treat shock/sepsis early: oxygenation, appropriate fluids, vasopressors if needed, antibiotics/source control when sepsis is suspected, and repeat lactate.");
+    }
+    if (has(potassium) && (potassium < 3 || potassium > 5.5)) {
+      add(safetyActions, "Put the patient on cardiac monitoring for dangerous potassium abnormality or severe acid-base disturbance.");
+    }
+    if (hasFlag("diuretics") || hasFlag("acetazolamide") || hasFlag("renalFailure") || hasFlag("shock")) {
+      add(safetyActions, "Stop or review obvious contributors: diuretics, acetazolamide/topiramate, metformin in shock/AKI, ACE inhibitor/ARB/MRA with hyperkalemia, and excess normal saline.");
+    }
+
+    if (metabolicAcidosis) {
+      addMany(correctiveMeasures, [
+        "Metabolic acidosis: calculate anion gap, correct it for albumin, check Winter compensation, and treat the cause rather than the pH alone.",
+        "If PaCO2 is higher than expected, treat this as added ventilatory failure and consider NIV or intubation according to clinical status.",
+        "If PaCO2 is lower than expected, look for sepsis, hypoxia, liver disease, pain, pulmonary embolism, or another respiratory alkalosis driver."
+      ]);
+      if (highAG) {
+        addMany(correctiveMeasures, [
+          "High-anion-gap acidosis: treat shock and hypoxia first, measure or repeat lactate, and check ketones, renal function, salicylate/toxic alcohol risk, ischemia, seizure, or post-arrest state.",
+          "If diabetic ketoacidosis is suspected, start the local IV fluid, insulin, and potassium-guided protocol.",
+          "If renal failure with severe acidosis, hyperkalemia, pulmonary edema, or uremic complication is present, discuss urgent renal replacement therapy.",
+          "If toxic alcohol or salicylate is suspected, send osmolar gap/toxicology and activate the antidote/dialysis pathway.",
+          "Sodium bicarbonate is not routine; consider it only as a temporary bridge in severe acidemia with instability, severe hyperkalemia, renal failure, or bicarbonate-loss acidosis while definitive treatment starts."
+        ]);
+      }
+      if (normalAGAcidosis) {
+        addMany(correctiveMeasures, [
+          "Normal-anion-gap or hyperchloremic acidosis: stop unnecessary 0.9% saline and use balanced crystalloid if ongoing resuscitation is needed.",
+          "Replace volume and potassium when gastrointestinal bicarbonate loss is likely.",
+          "Check urine anion gap or urine osmolal gap if renal tubular acidosis is suspected.",
+          "If severe bicarbonate-loss acidosis is present, bicarbonate replacement may be considered under consultant direction."
+        ]);
+      }
+    }
+
+    if (metabolicAlkalosis) {
+      addMany(correctiveMeasures, [
+        "Metabolic alkalosis: assess volume status, potassium, magnesium, urine chloride, vomiting/NG suction, diuretics, and mineralocorticoid exposure."
+      ]);
+      if (chlorideResponsive && !chlorideResistant) {
+        addMany(correctiveMeasures, [
+          "Likely chloride-responsive alkalosis: give 0.9% saline if hypovolemic, replace potassium chloride, correct magnesium, reduce causative diuretics when possible, and treat vomiting or gastric loss.",
+          "Monitor potassium and pH repeatedly during correction."
+        ]);
+      } else if (chlorideResistant) {
+        addMany(correctiveMeasures, [
+          "Likely chloride-resistant or saline-unresponsive alkalosis: replace potassium chloride and magnesium, avoid blind saline loading if hypertensive or overloaded, stop causative diuretics if possible, and evaluate mineralocorticoid or renal chloride-wasting causes.",
+          "Mineralocorticoid antagonist or amiloride decisions should be consultant-led."
+        ]);
+      } else {
+        add(correctiveMeasures, "If alkalosis mechanism is unclear, urine chloride helps decide between saline/KCl-responsive loss and saline-unresponsive renal/mineralocorticoid patterns.");
+      }
+    }
+
+    if (respiratoryAcidosis) {
+      addMany(correctiveMeasures, [
+        "Respiratory acidosis: assess airway immediately, give controlled oxygen, and start NIV when appropriate if the patient is awake, cooperative, protecting the airway, and not in severe shock or vomiting.",
+        "Intubate or escalate if low GCS, severe work of breathing, refractory hypoxemia, shock, aspiration risk, or NIV failure is present.",
+        "Treat the driver: bronchodilator/steroid/antibiotic when indicated, naloxone for opioid effect, reduce sedatives, address neuromuscular weakness, or adjust ventilator settings.",
+        "Avoid rapid overcorrection in chronic CO2 retainers unless life-threatening."
+      ]);
+    }
+
+    if (respiratoryAlkalosis) {
+      addMany(correctiveMeasures, [
+        "Respiratory alkalosis: check oxygenation and A-a gradient if available, then treat hypoxemia, sepsis, fever, pain, anxiety, pneumonia, or pulmonary embolism risk.",
+        "If mechanically ventilated, reduce excessive respiratory rate or tidal volume only when clinically safe.",
+        "Do not sedate solely to normalize PaCO2 unless sedation is clinically required."
+      ]);
+    }
+
+    if (has(potassium) && potassium >= 6) {
+      addMany(correctiveMeasures, [
+        "Hyperkalemia danger: obtain ECG/cardiac monitoring, give calcium gluconate for ECG changes or severe hyperkalemia, shift potassium with insulin/dextrose and nebulised salbutamol, consider sodium bicarbonate if significant metabolic acidosis is present, remove potassium with diuresis/binder/dialysis as appropriate, and stop potassium-raising drugs."
+      ]);
+    } else if (has(potassium) && potassium > 5.5) {
+      add(correctiveMeasures, "Hyperkalemia risk: repeat potassium, ECG/cardiac monitoring, stop potassium-raising drugs, and treat urgently if ECG changes, rapid rise, renal failure, or severe acidosis is present.");
+    }
+    if (has(potassium) && potassium < 3) {
+      add(correctiveMeasures, "Hypokalemia danger: replace potassium chloride, use cardiac monitoring if severe or arrhythmia is present, correct magnesium, and avoid insulin or bicarbonate unless absolutely required because they can worsen hypokalemia.");
+    }
+
+    if (has(v.pH.value) && v.pH.value < 7.1) add(escalationTriggers, "pH <7.10.");
+    if (has(v.pH.value) && v.pH.value > 7.6) add(escalationTriggers, "pH >7.60.");
+    if (respiratoryAcidosis) add(escalationTriggers, "PaCO2 rising with drowsiness, fatigue, or ventilatory failure.");
+    if (has(potassium) && potassium >= 6) add(escalationTriggers, "Potassium >=6.0 mmol/L or ECG changes.");
+    if (has(potassium) && potassium < 2.5) add(escalationTriggers, "Potassium <2.5 mmol/L or arrhythmia.");
+    if (has(v.lactate.value) && v.lactate.value >= 4) add(escalationTriggers, "Lactate >=4 mmol/L, rising lactate, or shock.");
+    if (hasFlag("renalFailure")) add(escalationTriggers, "Severe renal failure, oliguria, hyperkalemia, pulmonary edema, or uremic complication.");
+    if (hasFlag("toxicAlcohol") || hasFlag("salicylate") || (has(metabolic.osmolalGap) && metabolic.osmolalGap > 10)) add(escalationTriggers, "Suspected toxic alcohol or salicylate poisoning.");
+    if (mixedDisorder) add(escalationTriggers, "Severe or clinically worsening mixed acid-base disorder.");
+    add(escalationTriggers, "Need for intubation, vasopressor, or renal replacement therapy.");
+
+    if (metabolicAcidosis && (hasFlag("shock") || hasFlag("sepsis") || (has(v.lactate.value) && v.lactate.value >= 4))) add(bedsideSummary, "Acidosis plus shock/lactate: resuscitate, oxygenate, give source control/antibiotics when sepsis is suspected, use vasopressors if needed, and trend lactate.");
+    if (metabolicAcidosis && respiratoryAcidosis) add(bedsideSummary, "Acidosis plus high CO2: support ventilation.");
+    if (metabolicAcidosis && highAG) add(bedsideSummary, "Acidosis plus high anion gap: follow lactate, ketone, renal failure, toxin, ischemia, seizure, or post-arrest pathway.");
+    if (normalAGAcidosis) add(bedsideSummary, "Acidosis plus normal anion gap: consider diarrhea, renal tubular acidosis, or saline pathway; replace fluid and potassium and avoid excess saline.");
+    if (chlorideResponsive) add(bedsideSummary, "Alkalosis with vomiting/diuretic/low chloride: saline plus potassium chloride and magnesium correction if hypovolemic.");
+    if (chlorideResistant) add(bedsideSummary, "Alkalosis with hypertension or high urine chloride: potassium chloride and magnesium, avoid blind saline, and evaluate mineralocorticoid or renal causes.");
+    if (has(potassium) && (potassium < 3 || potassium > 5.5)) add(bedsideSummary, "Any dangerous potassium abnormality: treat potassium first.");
+    if (!bedsideSummary.length) add(bedsideSummary, "Treat the immediate threat first: airway/breathing, shock/sepsis/hypoxia, dangerous potassium, renal failure/toxin/DKA, or ongoing gastrointestinal/renal electrolyte loss.");
+
+    return {
+      title: "Initial corrective measures",
+      purpose: "Initial stabilisation only. Final diagnosis, dose, fluid choice, ventilator strategy, renal replacement therapy, and definitive treatment should be decided by the consultant.",
+      core_rule: "Do not treat pH alone. Treat the immediate threat: airway/breathing, shock/sepsis/hypoxia, dangerous potassium abnormality, renal failure/toxin/DKA, or ongoing gastrointestinal/renal electrolyte loss.",
+      repeat_confirm: repeatConfirm,
+      immediate_safety_actions: safetyActions,
+      corrective_measures: correctiveMeasures,
+      escalation_triggers: escalationTriggers,
+      bedside_summary: bedsideSummary,
+      related_danger_flags: (validation.danger || []).concat(validation.validation || [])
+    };
+  }
+
   function lineItems(v, primary, metabolic, compensationResult, stewart, abe, oxy) {
     const lines = [];
     lines.push(`${primary.pHStatus}.`);
@@ -877,6 +1041,7 @@
     const abe = alacticBaseExcess(v);
     const oxy = oxygenation(v, settings);
     const causes = likelyCauses(v, primary, metabolic, stewart, abe, raw.flags || {});
+    const treatment = treatmentSuggestions(v, primary, metabolic, compensationResult, oxy, raw.flags || {}, validation);
     const finalDiagnosis = lineItems(v, primary, metabolic, compensationResult, stewart, abe, oxy);
     const stepwise = stepwiseInterpretation(v, primary, metabolic, compensationResult, stewart, abe, oxy, causes, settings);
 
@@ -974,6 +1139,7 @@
       stepwise_interpretation: stepwise,
       likely_causes: causes.causes,
       recommended_missing_tests: causes.recommendedMissingTests,
+      treatment_suggestions: treatment,
       clinical_warning: "Interpretation must be correlated with clinical context. This app does not replace clinician judgement."
     };
   }
