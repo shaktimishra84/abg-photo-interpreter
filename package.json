@@ -1,8 +1,8 @@
 {
-  "name": "abg-clinical-interpreter",
+  "name": "abg-interpreter",
   "version": "1.0.0",
   "private": true,
-  "description": "Static rule-based ABG interpreter with photo OCR-assisted input.",
+  "description": "Static rule-based ABG clinical interpreter.",
   "scripts": {
     "test": "node smoke-test.js"
   }
