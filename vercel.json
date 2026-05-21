@@ -1,5 +1,7 @@
 {
+  "buildCommand": "mkdir -p public",
   "cleanUrls": true,
+  "public": true,
   "headers": [
     {
       "source": "/(.*)",
@@ -13,6 +15,12 @@
           "value": "camera=(self)"
         }
       ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/:path*",
+      "destination": "/:path*"
     }
   ]
 }
